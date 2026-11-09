@@ -1,4 +1,4 @@
-# MRSPTU StudyRAG 🎓
+# arise 🎓
 
 > **Grounded Study Assistant for MRSPTU Syllabi using Hybrid RAG (Vector + BM25 + RRF + Gemini)**
 
