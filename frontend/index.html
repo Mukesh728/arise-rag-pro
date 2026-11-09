@@ -1,873 +1,983 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Arise</title>
-  <meta name="description" content="Arise - Grounded University Study Assistant using Dense Vector Search, BM25 Keyword Search, Reciprocal Rank Fusion (RRF), and Gemini LLM.">
+  <title>Arise — Grounded Study Assistant</title>
+  <meta name="description"
+    content="Arise - Grounded University Study Assistant using Dense Vector Search, BM25 Keyword Search, Reciprocal Rank Fusion (RRF), and Gemini LLM.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
-          colors: {
-            cream: { DEFAULT: '#f2efe9', hover: '#e8e4dc' },
-            ink: { DEFAULT: '#1a1a1a', light: '#333333' },
-            muted: '#555555',
-            border: { soft: '#e5e0d8', card: '#eae6df' },
-            fill: '#f9f8f6',
-          }
-        }
-      }
-    }
-  </script>
-  <link rel="stylesheet" href="style.css?v=12">
-  <link rel="stylesheet" href="/static/style.css?v=12">
-  <style>
-    :root {
-      --bg: #DECDB2;
-      --surface: #ffffff;
-      --line: #D0BDA1;
-      --ink: #1a1a1a;
-    }
-    html, body {
-      min-height: 100vh;
-      margin: 0;
-      padding: 0;
-      background-color: #DECDB2 !important;
-      background-image: 
-        radial-gradient(circle at 50% 0%, #EDE1CD 0%, #DECDB2 55%, #D4C1A3 100%),
-        radial-gradient(circle at 1px 1px, rgba(90, 68, 40, 0.15) 1.2px, transparent 0) !important;
-      background-size: 100% 100%, 24px 24px !important;
-      background-attachment: fixed !important;
-      color: #1a1a1a !important;
-    }
-    .app-layout, .main-container {
-      background: transparent !important;
-      min-height: 100vh;
-    }
-    /* Ensure crisp floating cards against the warm sand/skin canvas */
-    .query-panel-card,
-    .results-panel-card,
-    .ingest-form-card,
-    .viva-info-card,
-    .benchmark-hero-card,
-    .metric-card,
-    .benchmark-details-card,
-    .docs-header-card,
-    .cstat-card,
-    .corpus-subject-tree-card,
-    .deepdive-card,
-    .sample-generator-card,
-    .answer-body-card,
-    .citation-card,
-    .empty-state-card {
-      background-color: #ffffff !important;
-      border: 1px solid #D2BEA0 !important;
-      box-shadow: 0 4px 20px -2px rgba(85, 65, 40, 0.12), 0 2px 6px -1px rgba(85, 65, 40, 0.08) !important;
-    }
-    .app-header {
-      background-color: rgba(235, 222, 202, 0.94) !important;
-      border-bottom: 1px solid #C4B092 !important;
-    }
-
-    /* Fix dark badges & pills: Ensure pure white text */
-    .tab-pill,
-    .tab-button .tab-pill,
-    button.tab-button span.tab-pill,
-    .benchmark-badge,
-    .project-tag,
-    .badge-accent,
-    .ai-avatar-badge,
-    .step-num {
-      background-color: #1a1a1a !important;
-      color: #ffffff !important;
-      border: 1px solid #1a1a1a !important;
-      opacity: 1 !important;
-    }
-    .tab-pill *,
-    .tab-button .tab-pill *,
-    button.tab-button span.tab-pill *,
-    .benchmark-badge *,
-    .project-tag *,
-    .badge-accent *,
-    .ai-avatar-badge *,
-    .step-num * {
-      color: #ffffff !important;
-    }
-    .tab-button span:not(.tab-pill) {
-      color: inherit !important;
-    }
-  </style>
-
-<style>
-  /* Cinematic Intro Splash */
-  #cinematic-splash {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: #000;
-    z-index: 99999;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-    transition: opacity 0.8s ease-out;
-    cursor: none;
-  }
-  #intro-animation {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-  }
-  .splash-hidden {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .brand-glass-3d {
-      display: inline-block;
-      font-family: 'Inter', sans-serif;
-      font-weight: 800;
-      font-size: 1.5rem;
-      letter-spacing: -0.04em;
-      /* Sky Blue Glass Background */
-      background: linear-gradient(135deg, rgba(56, 189, 248, 0.25) 0%, rgba(14, 165, 233, 0.1) 100%);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.6);
-      border-radius: 16px;
-      padding: 8px 20px;
-      /* 3D Glass Shadow & Shine */
-      box-shadow:
-          0 8px 32px 0 rgba(14, 165, 233, 0.15),
-          inset 0 1px 0 rgba(255, 255, 255, 0.8);
-      color: #0369a1; /* Dark Sky Blue Text */
-      text-shadow: 1px 1px 0px rgba(255,255,255,0.8);
-      transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-      cursor: default;
-  }
-  .brand-glass-3d:hover {
-      transform: translateY(-3px) scale(1.02);
-      box-shadow: 0 12px 40px 0 rgba(14, 165, 233, 0.25);
-      background: linear-gradient(135deg, rgba(56, 189, 248, 0.35) 0%, rgba(14, 165, 233, 0.15) 100%);
-  }
-</style>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+    rel="stylesheet">
+  <script>try { var t = localStorage.getItem('arise-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) { }</script>
+  <link rel="stylesheet" href="/static/style.css?v=22">
+  <link rel="stylesheet" href="style.css?v=22">
 </head>
-<body class="min-h-screen antialiased" style="background-color: #DECDB2 !important; background-image: radial-gradient(circle at 50% 0%, #EDE1CD 0%, #DECDB2 55%, #D4C1A3 100%), radial-gradient(circle at 1px 1px, rgba(90, 68, 40, 0.15) 1.2px, transparent 0) !important; background-size: 100% 100%, 24px 24px !important; background-attachment: fixed !important;">
 
-  <!-- Cinematic Full-Screen Splash Intro -->
-  <div id="cinematic-splash">
-    <video id="intro-animation" src="spiderman_intro.mp4" autoplay muted playsinline preload="auto"></video>
+<body>
+
+  <!-- Premium Intro Splash -->
+  <div id="cinematic-splash" data-testid="intro-splash">
+    <div class="splash-orbit o1"></div>
+    <div class="splash-orbit o2"></div>
+    <div class="splash-inner">
+      <div class="splash-mark"><span>ar</span><i></i></div>
+      <div class="splash-word"><span>Arise</span><b>.ai</b></div>
+      <p class="splash-tag">Grounded answers from your syllabus</p>
+      <div class="splash-bar"><span></span></div>
+      <div class="splash-steps"><span>Extract</span><span>Chunk</span><span>Retrieve</span><span>Cite</span></div>
+    </div>
   </div>
 
-  <div class="ambient-glow-top"></div>
+  <div class="stage">
 
-  <div class="app-layout min-h-screen flex flex-col">
-
-    <!-- Top Navigation & Brand Header -->
-    <header class="app-header sticky top-0 z-50">
-      <div class="header-inner max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
-        <div class="brand-group flex items-center gap-3">
-          <div class="logo-icon-wrapper relative flex items-center justify-center w-9 h-9 bg-[#1a1a1a] rounded-xl text-white flex-shrink-0">
-            <svg class="brand-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-              <line x1="12" y1="6" x2="16" y2="6"></line>
-              <line x1="12" y1="10" x2="16" y2="10"></line>
-              <circle cx="8" cy="8" r="1" fill="currentColor"></circle>
-            </svg>
-          </div>
-          <div class="brand-text">
-            <div class="brand-title-row flex items-center gap-2">
-              <h1 class="brand-glass-3d">Arise</h1>
-            </div>
-            <p class="brand-subtitle text-xs text-[#888888] mt-0.5">Grounded Syllabus Assistant • Hybrid RRF Search • Exact Citation Grounding</p>
-          </div>
-        </div>
-
-        <div class="header-actions flex items-center gap-3">
-          <div class="status-indicator-pill flex items-center gap-2 bg-white border border-[#eae6df] rounded-full px-4 py-1.5 text-sm shadow-sm" id="server-status-pill" title="FastAPI ChromaDB Vector Store Status">
-            <span class="status-dot online w-2 h-2 rounded-full bg-green-500 flex-shrink-0" id="status-dot"></span>
-            <span class="status-label text-xs font-medium text-[#555555]" id="status-label">ChromaDB Online</span>
-            <span class="chunk-badge text-xs font-semibold text-[#1a1a1a] bg-[#f2efe9] border border-[#e5e0d8] rounded-full px-2 py-0.5" id="header-chunk-count">0 Chunks</span>
-          </div>
-
-          <a href="/docs" target="_blank" class="nav-btn ghost-btn flex items-center gap-1.5 bg-white border border-[#eae6df] rounded-lg px-3 py-1.5 text-sm text-[#555555] hover:border-[#1a1a1a] hover:text-[#1a1a1a] transition-all" title="Open Interactive API Docs (Swagger)">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-            <span>Swagger API</span>
-          </a>
-        </div>
-      </div>
-
-      <!-- Navigation Tabs -->
-      <nav class="nav-tabs-bar max-w-7xl mx-auto px-8 flex gap-0" role="tablist">
-        <button class="tab-button active flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#555555] hover:text-[#1a1a1a] transition-all" id="tab-btn-assistant" data-tab="assistant" role="tab" aria-selected="true">
-          <svg class="tab-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+    <!-- Icon Rail -->
+    <aside class="rail" aria-label="Quick navigation">
+      <div class="rail-logo">ar</div>
+      <nav class="rail-nav">
+        <button class="rail-btn is-active" data-go="assistant" title="Study Assistant" data-testid="rail-assistant">
+          <svg viewBox="0 0 24 24">
+            <path d="M3 10.5 12 3l9 7.5" />
+            <path d="M5 9v11h14V9" />
+            <path d="M10 20v-6h4v6" />
           </svg>
-          <span>Study Assistant</span>
         </button>
-
-        <button class="tab-button flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#555555] hover:text-[#1a1a1a] transition-all" id="tab-btn-ingest" data-tab="ingest" role="tab" aria-selected="false">
-          <svg class="tab-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
+        <button class="rail-btn" data-go="ingest" title="PDF Syllabus Ingest" data-testid="rail-ingest">
+          <svg viewBox="0 0 24 24">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <path d="m17 8-5-5-5 5" />
+            <path d="M12 3v12" />
           </svg>
-          <span>PDF Syllabus Ingest</span>
         </button>
-
-        <button class="tab-button flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#555555] hover:text-[#1a1a1a] transition-all" id="tab-btn-benchmark" data-tab="benchmark" role="tab" aria-selected="false">
-          <svg class="tab-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="20" x2="18" y2="10"></line>
-            <line x1="12" y1="20" x2="12" y2="4"></line>
-            <line x1="6" y1="20" x2="6" y2="14"></line>
+        <button class="rail-btn" data-go="benchmark" title="Viva Evaluation" data-testid="rail-benchmark">
+          <svg viewBox="0 0 24 24">
+            <path d="M18 20V10" />
+            <path d="M12 20V4" />
+            <path d="M6 20v-6" />
           </svg>
-          <span>Viva Evaluation Benchmark</span>
-          <span class="tab-pill text-[10px] font-bold bg-[#1a1a1a] text-white px-2.5 py-0.5 rounded-full inline-block" style="color: #ffffff !important; background-color: #1a1a1a !important;">Hit Rate@K</span>
         </button>
-
-        <button class="tab-button flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#555555] hover:text-[#1a1a1a] transition-all" id="tab-btn-documents" data-tab="documents" role="tab" aria-selected="false">
-          <svg class="tab-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="3" y1="9" x2="21" y2="9"></line>
-            <line x1="9" y1="21" x2="9" y2="9"></line>
+        <button class="rail-btn" data-go="documents" title="Corpus & Chunks" data-testid="rail-documents">
+          <svg viewBox="0 0 24 24">
+            <ellipse cx="12" cy="5" rx="8" ry="3" />
+            <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
+            <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
           </svg>
-          <span>Corpus &amp; Chunks</span>
         </button>
       </nav>
-    </header>
+      <div class="rail-foot">
+        <button class="rail-btn" data-theme-toggle title="Toggle light / dark" data-testid="rail-theme-toggle">
+          <svg class="icon-moon" viewBox="0 0 24 24">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+          </svg>
+          <svg class="icon-sun" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="4" />
+            <path
+              d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+          </svg>
+        </button>
+        <a class="rail-btn" href="/docs" target="_blank" title="API Docs" data-testid="rail-docs">
+          <svg viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <path d="M14 2v6h6" />
+          </svg>
+        </a>
+        <div class="rail-avatar">CS</div>
+      </div>
+    </aside>
 
-    <!-- Main Content Container -->
-    <main class="main-container min-h-screen max-w-7xl mx-auto w-full px-8 py-8 flex-1">
+    <!-- Main Frame -->
+    <div class="frame">
 
-      <!-- TAB 1: STUDY ASSISTANT -->
-      <section class="tab-content active" id="tab-assistant" role="tabpanel">
-        <div class="assistant-grid grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <!-- Left Column: Search & Controls -->
-          <div class="query-panel-card bg-white rounded-2xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df]">
-            <div class="card-header-clean flex items-start gap-4 mb-6">
-              <div class="header-icon-box flex items-center justify-center w-10 h-10 bg-[#f2efe9] border border-[#e5e0d8] rounded-xl flex-shrink-0 text-[#1a1a1a]">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-              </div>
-              <div>
-                <h2 class="card-title text-xl font-bold tracking-tight text-[#1a1a1a]">Ask Syllabus Material</h2>
-                <p class="card-desc text-sm text-[#555555] mt-1">Ground your questions in uploaded MRSPTU course PDFs with citation verification.</p>
-              </div>
-            </div>
+      <!-- Sidebar -->
+      <header class="sidebar app-header">
+        <div class="brand">
+          <span class="brand-word">Arise<span class="brand-dot">.</span><span class="brand-ai">ai</span></span>
+          <span class="brand-tag">RAG</span>
+        </div>
 
-            <form id="rag-query-form" class="query-form">
-              <!-- Search Input Area -->
-              <div class="input-field-group mb-4">
-                <label for="query-input" class="field-label block text-xs font-semibold text-[#555555] uppercase tracking-wide mb-2">Student Question / Topic</label>
-                <div class="search-textarea-wrapper">
-                  <textarea
-                    id="query-input"
-                    class="custom-textarea w-full h-28 bg-[#f9f8f6] border border-[#e5e0d8] rounded-xl p-4 text-[#1a1a1a] text-sm placeholder-[#999999] focus:outline-none focus:border-[#1a1a1a] focus:ring-1 focus:ring-[#1a1a1a] transition-all resize-none"
-                    rows="3"
-                    placeholder="e.g. Explain Nielsen's 10 Usability Heuristics, or What is Entropy in Decision Trees?"
-                    required
-                  ></textarea>
-                </div>
-              </div>
+        <nav class="nav-tabs-bar" role="tablist">
+          <button class="tab-button active" id="tab-btn-assistant" data-tab="assistant" role="tab" aria-selected="true"
+            data-testid="tab-assistant">
+            <svg class="tab-icon" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" />
+              <path d="M12 17h.01" />
+            </svg>
+            <span>Study Assistant</span>
+          </button>
+          <button class="tab-button" id="tab-btn-ingest" data-tab="ingest" role="tab" aria-selected="false"
+            data-testid="tab-ingest">
+            <svg class="tab-icon" viewBox="0 0 24 24">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <path d="m17 8-5-5-5 5" />
+              <path d="M12 3v12" />
+            </svg>
+            <span>PDF Syllabus Ingest</span>
+          </button>
+          <button class="tab-button" id="tab-btn-benchmark" data-tab="benchmark" role="tab" aria-selected="false"
+            data-testid="tab-benchmark">
+            <svg class="tab-icon" viewBox="0 0 24 24">
+              <path d="M18 20V10" />
+              <path d="M12 20V4" />
+              <path d="M6 20v-6" />
+            </svg>
+            <span>Viva Evaluation</span>
+            <span class="tab-pill">@K</span>
+          </button>
+          <button class="tab-button" id="tab-btn-documents" data-tab="documents" role="tab" aria-selected="false"
+            data-testid="tab-documents">
+            <svg class="tab-icon" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="3" />
+              <path d="M3 9h18" />
+              <path d="M9 21V9" />
+            </svg>
+            <span>Corpus &amp; Chunks</span>
+          </button>
+        </nav>
 
-              <!-- Quick Prompt Suggestions -->
-              <div class="quick-prompts-row flex flex-wrap items-center gap-2 mb-5">
-                <span class="quick-label text-xs text-[#888888] font-medium">Try:</span>
-                <button type="button" class="quick-chip bg-[#f9f8f6] border border-[#e5e0d8] rounded-full px-3 py-1 text-xs text-[#555555] hover:border-[#1a1a1a] hover:text-[#1a1a1a] cursor-pointer transition-all" data-prompt="Explain Nielsen's 10 Usability Heuristics in Human Computer Interaction">Nielsen's 10 Heuristics</button>
-                <button type="button" class="quick-chip bg-[#f9f8f6] border border-[#e5e0d8] rounded-full px-3 py-1 text-xs text-[#555555] hover:border-[#1a1a1a] hover:text-[#1a1a1a] cursor-pointer transition-all" data-prompt="Explain Decision Tree Induction and Entropy calculation">Decision Tree Induction</button>
-                <button type="button" class="quick-chip bg-[#f9f8f6] border border-[#e5e0d8] rounded-full px-3 py-1 text-xs text-[#555555] hover:border-[#1a1a1a] hover:text-[#1a1a1a] cursor-pointer transition-all" data-prompt="Compare Shneiderman's Golden Rules with Nielsen's Heuristics">Golden Rules vs Heuristics</button>
-                <button type="button" class="quick-chip bg-[#f9f8f6] border border-[#e5e0d8] rounded-full px-3 py-1 text-xs text-[#555555] hover:border-[#1a1a1a] hover:text-[#1a1a1a] cursor-pointer transition-all" data-prompt="What are the course outcomes and units of Soft Computing in CSE Sem 7?">Soft Computing Syllabus</button>
-              </div>
-
-              <!-- Metadata Filter Controls (Subject & Unit) -->
-              <div class="filter-controls-grid grid grid-cols-2 gap-4 mb-5">
-                <div class="select-group">
-                  <label for="filter-subject" class="field-label block text-xs font-semibold text-[#555555] uppercase tracking-wide mb-2">Subject Filter</label>
-                  <div class="select-wrapper relative">
-                    <select id="filter-subject" class="custom-select w-full bg-[#f9f8f6] border border-[#e5e0d8] text-[#1a1a1a] text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#1a1a1a] appearance-none cursor-pointer">
-                      <option value="all">All Subjects</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div class="select-group">
-                  <label for="filter-unit" class="field-label block text-xs font-semibold text-[#555555] uppercase tracking-wide mb-2">Unit / Chapter</label>
-                  <div class="select-wrapper relative">
-                    <select id="filter-unit" class="custom-select w-full bg-[#f9f8f6] border border-[#e5e0d8] text-[#1a1a1a] text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#1a1a1a] appearance-none cursor-pointer">
-                      <option value="all">All Units</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Retrieval Mode & Advanced Settings -->
-              <div class="search-mode-selector mb-5">
-                <label class="field-label block text-xs font-semibold text-[#555555] uppercase tracking-wide mb-2">Retrieval Strategy</label>
-                <div class="mode-toggle-group grid grid-cols-2 gap-3">
-                  <label class="mode-option relative cursor-pointer" id="mode-opt-hybrid">
-                    <input type="radio" name="search_mode" value="hybrid" checked id="radio-hybrid">
-                    <div class="mode-card bg-[#f9f8f6] border border-[#e5e0d8] rounded-xl p-4 hover:border-[#1a1a1a] transition-all">
-                      <div class="mode-head flex items-center justify-between mb-1">
-                        <span class="mode-title text-sm font-semibold text-[#1a1a1a]">⚡ Hybrid RRF</span>
-                        <span class="badge-accent text-[10px] font-semibold bg-[#1a1a1a] text-white px-2 py-0.5 rounded-full">Recommended</span>
-                      </div>
-                      <p class="mode-desc text-xs text-[#555555] leading-relaxed">Dense Cosine Vector + Sparse BM25 Keyword Search merged via Reciprocal Rank Fusion (k=60).</p>
-                    </div>
-                  </label>
-
-                  <label class="mode-option relative cursor-pointer" id="mode-opt-vector">
-                    <input type="radio" name="search_mode" value="vector" id="radio-vector">
-                    <div class="mode-card bg-[#f9f8f6] border border-[#e5e0d8] rounded-xl p-4 hover:border-[#1a1a1a] transition-all">
-                      <div class="mode-head flex items-center justify-between mb-1">
-                        <span class="mode-title text-sm font-semibold text-[#1a1a1a]">🔍 Vector Only</span>
-                      </div>
-                      <p class="mode-desc text-xs text-[#555555] leading-relaxed">ChromaDB dense embedding similarity without keyword fusion.</p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              <!-- Advanced Parameters Row -->
-              <div class="params-row bg-[#f9f8f6] border border-[#e5e0d8] rounded-xl p-4 grid grid-cols-2 gap-4 mb-5">
-                <div class="param-item">
-                  <div class="param-header flex items-center justify-between mb-2">
-                    <span class="param-name text-xs font-semibold text-[#555555]">Top Chunks (K)</span>
-                    <span class="param-val text-xs font-bold text-[#1a1a1a] bg-white border border-[#e5e0d8] px-2 py-0.5 rounded-full" id="val-top-k">3</span>
-                  </div>
-                  <input type="range" id="param-top-k" min="1" max="8" value="3" class="slider-input">
-                </div>
-
-                <div class="param-item">
-                  <div class="param-header flex items-center justify-between mb-2">
-                    <span class="param-name text-xs font-semibold text-[#555555]">Guardrail Threshold</span>
-                    <span class="param-val text-xs font-bold text-[#1a1a1a] bg-white border border-[#e5e0d8] px-2 py-0.5 rounded-full" id="val-threshold">0.32</span>
-                  </div>
-                  <input type="range" id="param-threshold" min="0.10" max="0.70" step="0.02" value="0.32" class="slider-input">
-                </div>
-              </div>
-
-              <!-- Submit Button -->
-              <button type="submit" id="btn-submit-query" class="submit-action-btn w-full bg-[#1a1a1a] hover:bg-[#333333] text-white font-semibold py-3.5 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-black/10 flex items-center justify-center gap-2 text-sm">
-                <span class="btn-spinner" id="query-spinner"></span>
-                <span class="btn-text flex items-center gap-2">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                  </svg>
-                  <span>Query Study Assistant</span>
-                </span>
-              </button>
-            </form>
-          </div>
-
-          <!-- Right Column: Results & Citations -->
-          <div class="results-panel-card bg-white rounded-2xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df] min-h-[520px] relative" id="results-panel">
-            <!-- Initial Empty State -->
-            <div class="empty-state-card flex flex-col items-center justify-center text-center min-h-[400px]" id="results-empty-state">
-              <div class="empty-icon-wrap w-14 h-14 bg-[#f2efe9] border border-[#e5e0d8] rounded-2xl flex items-center justify-center mb-4 text-[#888888]">
-                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-                </svg>
-              </div>
-              <h3 class="empty-title text-base font-semibold text-[#888888] mb-2">Ready for Your Syllabus Questions</h3>
-              <p class="empty-subtitle text-sm text-[#aaaaaa] leading-relaxed max-w-sm mb-6">Type a question on the left or click a suggested prompt. The grounded RAG pipeline will retrieve relevant passages from your uploaded PDFs, calculate RRF ranks, and synthesize a verified response with textbook page numbers.</p>
-              <div class="pipeline-feature-tags flex flex-wrap justify-center gap-2">
-                <span class="feat-tag bg-[#f2efe9] text-[#555555] border border-[#e5e0d8] rounded-full px-3 py-1 text-xs">Sliding Token Window (500/50)</span>
-                <span class="feat-tag bg-[#f2efe9] text-[#555555] border border-[#e5e0d8] rounded-full px-3 py-1 text-xs">HNSW Cosine Vector Space</span>
-                <span class="feat-tag bg-[#f2efe9] text-[#555555] border border-[#e5e0d8] rounded-full px-3 py-1 text-xs">BM25 Okapi Keyword Search</span>
-                <span class="feat-tag bg-[#f2efe9] text-[#555555] border border-[#e5e0d8] rounded-full px-3 py-1 text-xs">Strict Guardrail Verification</span>
-              </div>
-            </div>
-
-            <!-- Active Answer & Citations Box (Hidden initially) -->
-            <div class="results-active-container" id="results-active-container" style="display: none;">
-              <!-- Meta Header of Results -->
-              <div class="answer-meta-bar flex items-center justify-between mb-4">
-                <div class="answer-meta-left flex flex-wrap items-center gap-2">
-                  <span class="meta-pill mode-badge bg-[#f2efe9] text-[#555555] border border-[#e5e0d8] rounded-full px-3 py-1 text-xs font-medium" id="res-mode-badge">⚡ Hybrid RRF</span>
-                  <span class="meta-pill latency-badge bg-[#f2efe9] text-[#555555] border border-[#e5e0d8] rounded-full px-3 py-1 text-xs font-medium" id="res-time-badge">⚡ 45ms</span>
-                  <span class="meta-pill citation-count-badge bg-[#f2efe9] text-[#555555] border border-[#e5e0d8] rounded-full px-3 py-1 text-xs font-medium" id="res-citation-count-badge">3 Citations</span>
-                  <span class="meta-pill bg-[#f2efe9] border border-[#e5e0d8] rounded-full px-3 py-1 text-xs font-medium text-[#888888]" id="res-params-badge"></span>
-                </div>
-                <button type="button" class="btn-inspect-chunks flex items-center gap-1.5 text-xs text-[#555555] hover:text-[#1a1a1a] border border-[#e5e0d8] hover:border-[#1a1a1a] rounded-lg px-3 py-1.5 transition-all bg-white" id="btn-toggle-chunks">
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="16 18 22 12 16 6"></polyline>
-                    <polyline points="8 6 2 12 8 18"></polyline>
-                  </svg>
-                  <span>Inspect Chunks &amp; Fusion Ranks</span>
-                </button>
-              </div>
-
-              <!-- Fallback Warning Box (Shown if out of syllabus) -->
-              <div class="fallback-alert-box bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 mb-4" id="fallback-alert-box" style="display: none;">
-                <div class="fallback-icon text-lg flex-shrink-0">⚠️</div>
-                <div class="fallback-content">
-                  <h4 class="fallback-title text-sm font-bold text-amber-700 mb-1">Grounded Guardrail Alert</h4>
-                  <p class="fallback-desc text-xs text-amber-600 leading-relaxed" id="fallback-desc-text">
-                    The similarity score of the uploaded material did not meet the confidence threshold (<span id="fallback-threshold-val">0.32</span>). The system prevented an ungrounded hallucination and returned the exact required fallback message:
-                  </p>
-                  <div class="fallback-quote mt-2 bg-amber-100/60 border border-amber-200 rounded-lg px-3 py-2 text-xs font-medium text-amber-800 italic" id="fallback-quote-msg">"I'm sorry, I couldn't find the answer to this question in the provided documents."</div>
-                </div>
-              </div>
-
-              <!-- Synthesized Answer Card -->
-              <div class="answer-body-card bg-[#f9f8f6] border border-[#eae6df] rounded-xl p-6 mb-5">
-                <div class="answer-header-row flex items-center justify-between mb-3">
-                  <div class="answer-title-group flex items-center gap-2">
-                    <span class="ai-avatar-badge text-xs font-bold bg-[#1a1a1a] text-white px-2.5 py-1 rounded-lg">AI</span>
-                    <h3 class="answer-heading text-sm font-semibold text-[#1a1a1a]">Grounded Academic Response</h3>
-                  </div>
-                  <button class="copy-btn flex items-center gap-1.5 text-xs text-[#555555] hover:text-[#1a1a1a] border border-[#e5e0d8] hover:border-[#1a1a1a] rounded-lg px-2.5 py-1.5 transition-all bg-white" id="btn-copy-answer" title="Copy answer to clipboard">
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                    <span>Copy</span>
-                  </button>
-                </div>
-                <div class="markdown-answer-content text-sm leading-relaxed text-[#333333]" id="answer-text-content">
-                  <!-- Grounded Answer Rendered Here -->
-                </div>
-              </div>
-
-              <!-- Citations Section -->
-              <div class="citations-container">
-                <div class="citations-header mb-3">
-                  <h4 class="section-title flex items-center gap-2 text-sm font-semibold text-[#1a1a1a] mb-1">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                      <polyline points="14 2 14 8 20 8"></polyline>
-                    </svg>
-                    <span>Syllabus Source Citations &amp; Page References</span>
-                  </h4>
-                  <span class="citation-subtext text-xs text-[#888888]">Click any citation to view the context window extracted from the PDF.</span>
-                </div>
-
-                <div class="citations-grid grid gap-2" id="citations-list">
-                  <!-- Dynamic Citation Cards -->
-                </div>
-              </div>
-
-              <!-- Collapsible Raw Chunks / RRF Transparency Drawer -->
-              <div class="raw-chunks-drawer border-t border-[#eae6df] mt-5 pt-4" id="raw-chunks-drawer" style="display: none;">
-                <div class="drawer-header flex items-start justify-between mb-3">
-                  <div>
-                    <h4 class="drawer-title text-sm font-semibold text-[#1a1a1a]">Retrieval &amp; Fusion Scorecard</h4>
-                    <p class="drawer-subtitle text-xs text-[#888888] mt-0.5">Raw score breakdown for College Viva demonstration (Vector Cosine Distance vs BM25 vs RRF)</p>
-                  </div>
-                  <button type="button" class="close-drawer-btn text-[#888888] hover:text-[#1a1a1a] text-sm transition-colors px-2 py-1" id="btn-close-drawer">✕</button>
-                </div>
-                <div class="raw-chunks-table-wrapper table-responsive" id="raw-chunks-table-container">
-                  <!-- Dynamic Table of Chunks -->
-                </div>
-              </div>
-
-            </div>
+        <div class="side-block">
+          <span class="side-label">Index status</span>
+          <div class="status-indicator-pill" id="server-status-pill" title="FastAPI ChromaDB Vector Store Status"
+            data-testid="server-status">
+            <span class="status-dot online" id="status-dot"></span>
+            <span class="status-label" id="status-label">ChromaDB Online</span>
+            <span class="chunk-badge" id="header-chunk-count" data-testid="header-chunk-count">0 Chunks</span>
           </div>
         </div>
-      </section>
 
-      <!-- TAB 2: PDF SYLLABUS & NOTES INGEST -->
-      <section class="tab-content" id="tab-ingest" role="tabpanel">
-        <div class="ingest-layout-grid grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <!-- Ingest Form -->
-          <div class="ingest-form-card bg-white rounded-2xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df]">
-            <div class="card-header-clean flex items-start gap-4 mb-6">
-              <div class="header-icon-box accent-purple flex items-center justify-center w-10 h-10 bg-purple-50 border border-purple-100 rounded-xl flex-shrink-0 text-purple-600">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="17 8 12 3 7 8"></polyline>
-                  <line x1="12" y1="3" x2="12" y2="15"></line>
-                </svg>
-              </div>
-              <div>
-                <h2 class="card-title text-xl font-bold tracking-tight text-[#1a1a1a]">Upload Course Material (.PDF)</h2>
-                <p class="card-desc text-sm text-[#555555] mt-1">Upload university syllabus, lecture notes, or textbooks to index them into ChromaDB and BM25.</p>
-              </div>
-            </div>
-
-            <form id="ingest-pdf-form" class="ingest-form">
-              <!-- Drag and Drop Zone -->
-              <div class="drop-zone border-2 border-dashed border-[#e5e0d8] rounded-xl p-8 text-center cursor-pointer hover:border-[#1a1a1a] transition-all mb-5 bg-[#f9f8f6]" id="pdf-drop-zone">
-                <input type="file" id="pdf-file-input" accept=".pdf" class="file-input-hidden hidden" required>
-                <div class="drop-zone-content">
-                  <div class="upload-cloud-icon flex justify-center mb-3 text-[#aaaaaa]">
-                    <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.75">
-                      <polyline points="16 16 12 12 8 16"></polyline>
-                      <line x1="12" y1="12" x2="12" y2="21"></line>
-                      <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
-                      <polyline points="16 16 12 12 8 16"></polyline>
-                    </svg>
-                  </div>
-                  <h3 class="drop-title text-sm font-semibold text-[#1a1a1a] mb-1">Select or drag &amp; drop syllabus PDF</h3>
-                  <p class="drop-subtitle text-xs text-[#888888]">Only PDF documents with selectable text are supported</p>
-                  <div class="selected-file-preview flex items-center justify-center gap-2 mt-3 bg-white border border-[#eae6df] rounded-lg px-3 py-2" id="selected-file-preview" style="display: none;">
-                    <span class="file-icon">📄</span>
-                    <span class="file-name text-sm text-[#1a1a1a] font-medium" id="file-name-label">filename.pdf</span>
-                    <button type="button" class="remove-file-btn text-[#888888] hover:text-red-500 transition-colors ml-2" id="btn-remove-file">✕</button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Metadata inputs: Subject & Unit -->
-              <div class="form-row-two-col grid grid-cols-2 gap-4 mb-5">
-                <div class="input-field-group">
-                  <label for="input-subject" class="field-label block text-xs font-semibold text-[#555555] uppercase tracking-wide mb-2">Subject / Course Name *</label>
-                  <input
-                    type="text"
-                    id="input-subject"
-                    class="custom-input w-full bg-[#f9f8f6] border border-[#e5e0d8] text-[#1a1a1a] text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#1a1a1a] transition-all"
-                    placeholder="e.g. Operating Systems"
-                    required
-                  >
-                </div>
-
-                <div class="input-field-group">
-                  <label for="input-unit" class="field-label block text-xs font-semibold text-[#555555] uppercase tracking-wide mb-2">Unit / Chapter Tag *</label>
-                  <input
-                    type="text"
-                    id="input-unit"
-                    class="custom-input w-full bg-[#f9f8f6] border border-[#e5e0d8] text-[#1a1a1a] text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#1a1a1a] transition-all"
-                    placeholder="e.g. Unit 1"
-                    value="Unit 1"
-                    required
-                  >
-                </div>
-              </div>
-
-              <div class="ingest-pipeline-explainer bg-[#f9f8f6] border border-[#eae6df] rounded-xl p-4 mb-5 space-y-2">
-                <div class="explainer-step flex items-start gap-3">
-                  <span class="step-num text-xs font-bold bg-[#1a1a1a] text-white w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
-                  <span class="step-txt text-xs text-[#555555]">PDFExtractor extracts pages preserving 1-indexed numbers</span>
-                </div>
-                <div class="explainer-step flex items-start gap-3">
-                  <span class="step-num text-xs font-bold bg-[#1a1a1a] text-white w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
-                  <span class="step-txt text-xs text-[#555555]">TokenChunker splits into ~500 tokens with 50-token overlap</span>
-                </div>
-                <div class="explainer-step flex items-start gap-3">
-                  <span class="step-num text-xs font-bold bg-[#1a1a1a] text-white w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
-                  <span class="step-txt text-xs text-[#555555]">ChromaDB stores cosine embeddings + BM25Okapi indexes tokens</span>
-                </div>
-              </div>
-
-              <!-- Ingest Button -->
-              <button type="submit" id="btn-start-ingest" class="submit-action-btn accent-btn w-full bg-[#1a1a1a] hover:bg-[#333333] text-white font-semibold py-3.5 px-6 rounded-xl transition-all duration-200 shadow-lg shadow-black/10 flex items-center justify-center gap-2 text-sm">
-                <span class="btn-spinner" id="ingest-spinner"></span>
-                <span class="btn-text flex items-center gap-2">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                  </svg>
-                  <span>Process &amp; Index PDF into Vector Store</span>
-                </span>
-              </button>
-            </form>
-
-            <!-- Ingest Success Alert / Card -->
-            <div class="ingest-success-card flex items-start gap-3 mt-4 bg-green-50 border border-green-200 rounded-xl p-4" id="ingest-result-card" style="display: none;">
-              <div class="success-icon-badge flex-shrink-0 w-7 h-7 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">✓</div>
-              <div class="success-details">
-                <h4 class="success-title text-sm font-bold text-green-800">Document Successfully Indexed!</h4>
-                <p class="success-message text-xs text-green-700 mt-0.5" id="ingest-success-msg"></p>
-                <div class="stat-pills-row flex flex-wrap gap-2 mt-2">
-                  <span class="stat-pill text-xs bg-green-100 text-green-800 border border-green-200 rounded-full px-2.5 py-0.5 font-medium" id="ingest-pages-stat">Pages: 0</span>
-                  <span class="stat-pill text-xs bg-green-100 text-green-800 border border-green-200 rounded-full px-2.5 py-0.5 font-medium" id="ingest-chunks-stat">Chunks: 0</span>
-                  <span class="stat-pill text-xs bg-green-100 text-green-800 border border-green-200 rounded-full px-2.5 py-0.5 font-medium" id="ingest-docid-stat">Doc ID: -</span>
-                </div>
-              </div>
-            </div>
+        <div class="side-block history-block">
+          <div class="side-label-row">
+            <span class="side-label">Recent questions</span>
+            <button type="button" class="side-mini" id="history-clear" data-testid="history-clear">Clear</button>
           </div>
-
-          <!-- Ingestion Tips & Viva Knowledge Card -->
-          <div class="viva-info-card bg-white rounded-2xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df]">
-            <h3 class="viva-card-title text-lg font-bold text-[#1a1a1a] mb-6 flex items-center gap-2">
-              <span>💡</span> Viva Knowledge: Ingestion &amp; Chunking
-            </h3>
-
-            <div class="viva-qa-block mb-5 pb-5 border-b border-[#eae6df]">
-              <h4 class="viva-q text-sm font-semibold text-[#1a1a1a] mb-2">Why ~500 Tokens with 50 Token Overlap?</h4>
-              <p class="viva-a text-sm text-[#555555] leading-relaxed">
-                Large language models have context windows, and embedding models lose semantic granularity if chunks are too large (e.g. 2000 words). A 500-token window preserves a complete conceptual paragraph or definition. The 50-token sliding overlap ensures that a concept split across chunk boundaries isn't truncated mid-sentence.
-              </p>
-            </div>
-
-            <div class="viva-qa-block mb-5 pb-5 border-b border-[#eae6df]">
-              <h4 class="viva-q text-sm font-semibold text-[#1a1a1a] mb-2">How Are Citations Grounded by Page?</h4>
-              <p class="viva-a text-sm text-[#555555] leading-relaxed">
-                During PDF extraction, <code>pypdf</code> records the exact 1-indexed page index of each character range. Each chunk embeds <code>page_number</code> in its Chroma metadata. When retrieved, citations map directly back to the textbook page for student verification.
-              </p>
-            </div>
-
-            <div class="viva-qa-block mb-6">
-              <h4 class="viva-q text-sm font-semibold text-[#1a1a1a] mb-2">Dual Indexing (ChromaDB + BM25):</h4>
-              <p class="viva-a text-sm text-[#555555] leading-relaxed">
-                When a PDF is uploaded, chunks are simultaneously stored in ChromaDB (for dense semantic retrieval) and registered in the in-memory BM25 Okapi index (for keyword retrieval).
-              </p>
-            </div>
-
-            <!-- Quick sample syllabus generator button for testing -->
-            <div class="sample-generator-card bg-[#f9f8f6] border border-[#eae6df] rounded-xl p-5">
-              <h4 class="sample-title text-sm font-semibold text-[#1a1a1a] mb-1">Need a Sample PDF to Test Right Away?</h4>
-              <p class="sample-desc text-xs text-[#555555] leading-relaxed mb-3">Generate a multi-page MRSPTU Operating Systems Syllabus PDF with pre-written Units (CPU Scheduling, Memory Management, Deadlocks).</p>
-              <button type="button" id="btn-generate-sample-pdf" class="btn-secondary-action flex items-center gap-2 text-sm font-medium text-[#1a1a1a] bg-white border border-[#e5e0d8] hover:border-[#1a1a1a] rounded-xl px-4 py-2.5 transition-all">
-                <span>⚡ Generate Sample OS Syllabus PDF</span>
-              </button>
-            </div>
-          </div>
+          <ul class="history-list" id="history-list" data-testid="history-list">
+            <li class="history-empty">Questions you ask will show up here.</li>
+          </ul>
         </div>
-      </section>
 
-      <!-- TAB 3: VIVA EVALUATION BENCHMARK -->
-      <section class="tab-content" id="tab-benchmark" role="tabpanel">
-        <div class="benchmark-container space-y-6">
-          <div class="benchmark-hero-card bg-white rounded-2xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df]">
-            <div class="benchmark-hero-header mb-6">
-              <div class="benchmark-badge inline-flex items-center text-xs font-bold bg-[#1a1a1a] text-white px-3.5 py-1 rounded-full mb-3 shadow-sm" style="color: #ffffff !important; background-color: #1a1a1a !important;">Capstone Evaluation Benchmark</div>
-              <h2 class="benchmark-title text-2xl font-bold tracking-tight text-[#1a1a1a] mb-2">Retrieval Accuracy: Vector Search vs. Hybrid RRF</h2>
-              <p class="benchmark-subtitle text-sm text-[#555555] leading-relaxed">
-                Demonstrate the empirical superiority of <strong class="text-[#1a1a1a]">Hybrid Search (Dense Cosine Embeddings + Sparse BM25 Keyword Search + Reciprocal Rank Fusion)</strong> over pure Vector Search for academic syllabus question-answering.
-              </p>
-            </div>
-
-            <!-- Benchmark Action Bar -->
-            <div class="benchmark-action-bar flex flex-wrap items-center justify-between gap-4">
-              <div class="benchmark-config-group flex flex-wrap items-center gap-4">
-                <div class="select-group inline flex items-center gap-2">
-                  <label for="eval-subject-filter" class="text-xs font-semibold text-[#555555] whitespace-nowrap">Subject:</label>
-                  <select id="eval-subject-filter" class="custom-select small bg-[#f9f8f6] border border-[#e5e0d8] text-[#1a1a1a] text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-[#1a1a1a]">
-                    <option value="all">All Subjects</option>
-                  </select>
-                </div>
-
-                <div class="select-group inline flex items-center gap-2">
-                  <label for="eval-top-k" class="text-xs font-semibold text-[#555555] whitespace-nowrap">Top-K Evaluation Window:</label>
-                  <select id="eval-top-k" class="custom-select small bg-[#f9f8f6] border border-[#e5e0d8] text-[#1a1a1a] text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-[#1a1a1a]">
-                    <option value="3" selected>Top 3 (Hit Rate@3)</option>
-                    <option value="5">Top 5 (Hit Rate@5)</option>
-                  </select>
-                </div>
-              </div>
-
-              <button type="button" id="btn-run-benchmark" class="run-benchmark-btn flex items-center gap-2 bg-[#1a1a1a] hover:bg-[#333333] text-white font-semibold py-2.5 px-5 rounded-xl transition-all text-sm shadow-lg shadow-black/10">
-                <span class="btn-spinner" id="bench-spinner"></span>
-                <span class="btn-text flex items-center gap-2">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                  </svg>
-                  <span>Run Benchmark Test Suite</span>
-                </span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Scoreboard Metric Cards -->
-          <div class="scoreboard-grid grid grid-cols-1 md:grid-cols-3 gap-6" id="scoreboard-grid">
-            <div class="metric-card vector-metric bg-white rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df]">
-              <div class="metric-label text-xs font-semibold text-[#555555] uppercase tracking-wide mb-3">Dense Vector Search Hit Rate</div>
-              <div class="metric-value text-3xl font-bold text-[#1a1a1a] mb-1" id="val-vector-hit-rate">--%</div>
-              <div class="metric-sub text-xs text-[#888888] mb-4" id="val-vector-hits">Hits: 0 / 0 queries</div>
-              <div class="metric-bar-bg bg-[#f2efe9] rounded-full h-1.5">
-                <div class="metric-bar-fill vector-fill bg-[#555555] h-1.5 rounded-full transition-all duration-500" id="bar-vector-fill" style="width: 0%;"></div>
-              </div>
-            </div>
-
-            <div class="metric-card hybrid-metric bg-white rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df]">
-              <div class="metric-label text-xs font-semibold text-[#555555] uppercase tracking-wide mb-3">Hybrid RRF Search Hit Rate</div>
-              <div class="metric-value text-3xl font-bold text-[#1a1a1a] mb-1" id="val-hybrid-hit-rate">--%</div>
-              <div class="metric-sub text-xs text-[#888888] mb-4" id="val-hybrid-hits">Hits: 0 / 0 queries</div>
-              <div class="metric-bar-bg bg-[#f2efe9] rounded-full h-1.5">
-                <div class="metric-bar-fill hybrid-fill bg-[#1a1a1a] h-1.5 rounded-full transition-all duration-500" id="bar-hybrid-fill" style="width: 0%;"></div>
-              </div>
-            </div>
-
-            <div class="metric-card delta-metric bg-white rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df]">
-              <div class="metric-label text-xs font-semibold text-[#555555] uppercase tracking-wide mb-3">Hybrid Accuracy Boost (Δ)</div>
-              <div class="metric-value delta-value text-3xl font-bold text-green-600 mb-1" id="val-delta-improvement">+0.0%</div>
-              <div class="metric-sub text-xs text-[#888888] mb-4">Empirical retrieval advantage</div>
-              <div class="metric-tag-pill inline-flex text-[10px] font-semibold bg-[#f2efe9] text-[#555555] border border-[#e5e0d8] rounded-full px-2.5 py-0.5">Reciprocal Rank Fusion Advantage</div>
-            </div>
-          </div>
-
-          <!-- Detailed Results Table -->
-          <div class="benchmark-details-card bg-white rounded-2xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df]">
-            <div class="details-header flex items-center justify-between mb-5">
-              <h3 class="details-title text-lg font-bold text-[#1a1a1a]">Per-Query Benchmark Breakdown</h3>
-              <span class="text-xs text-[#888888]" id="benchmark-query-count">0 queries evaluated</span>
-            </div>
-            <div class="table-responsive">
-              <table class="benchmark-table w-full" id="benchmark-results-table">
-                <thead>
-                  <tr>
-                    <th class="text-left text-xs font-semibold text-[#555555] uppercase tracking-wide py-3 px-3 bg-[#f9f8f6] border-b border-[#eae6df]">#</th>
-                    <th class="text-left text-xs font-semibold text-[#555555] uppercase tracking-wide py-3 px-3 bg-[#f9f8f6] border-b border-[#eae6df]">Question</th>
-                    <th class="text-left text-xs font-semibold text-[#555555] uppercase tracking-wide py-3 px-3 bg-[#f9f8f6] border-b border-[#eae6df]">Expected Page</th>
-                    <th class="text-left text-xs font-semibold text-[#555555] uppercase tracking-wide py-3 px-3 bg-[#f9f8f6] border-b border-[#eae6df]">Vector Pages</th>
-                    <th class="text-left text-xs font-semibold text-[#555555] uppercase tracking-wide py-3 px-3 bg-[#f9f8f6] border-b border-[#eae6df]">Vector Hit</th>
-                    <th class="text-left text-xs font-semibold text-[#555555] uppercase tracking-wide py-3 px-3 bg-[#f9f8f6] border-b border-[#eae6df]">Hybrid Pages</th>
-                    <th class="text-left text-xs font-semibold text-[#555555] uppercase tracking-wide py-3 px-3 bg-[#f9f8f6] border-b border-[#eae6df]">Hybrid Hit</th>
-                    <th class="text-left text-xs font-semibold text-[#555555] uppercase tracking-wide py-3 px-3 bg-[#f9f8f6] border-b border-[#eae6df]">Result</th>
-                  </tr>
-                </thead>
-                <tbody id="benchmark-table-body">
-                  <tr>
-                    <td colspan="8" class="text-center py-12 text-sm text-[#888888]">Run the benchmark to see per-query results.</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- RRF Deep Dive Explanation -->
-          <div class="bg-white rounded-2xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df] space-y-6">
-            <div class="deepdive-card">
-              <h4 class="card-subtitle-icon text-sm font-semibold text-[#1a1a1a] mb-3">📐 Why Hybrid RRF Outperforms Pure Vector Search</h4>
-              <p class="text-sm text-[#555555] leading-relaxed">
-                <strong class="text-[#1a1a1a]">Dense Vector Search (ChromaDB):</strong> Encodes semantic meaning via embedding cosine similarity. Excels at paraphrase matching but can miss exact terminology (e.g., acronyms like "FCFS", "HRRN", "SCAN").
-              </p>
-              <p class="text-sm text-[#555555] leading-relaxed mt-2">
-                <strong class="text-[#1a1a1a]">Sparse BM25 Keyword Search:</strong> Exact term frequency + IDF scoring. Excels at technical keywords, definitions, and syllabus code names but misses semantic variations.
-              </p>
-              <p class="text-sm text-[#555555] leading-relaxed mt-2">
-                <strong class="text-[#1a1a1a]">Reciprocal Rank Fusion (RRF):</strong> Formula: <code>RRF_Score(d) = Σ [ 1 / (60 + rank(d)) ]</code>. Because vector similarity scores and BM25 scores have completely different scales, RRF merges candidate lists based strictly on their relative ranks, eliminating score calibration errors.
-              </p>
-            </div>
-
-            <div class="deepdive-card pt-6 border-t border-[#eae6df]">
-              <h4 class="card-subtitle-icon text-sm font-semibold text-[#1a1a1a] mb-4">🎓 Examiner Viva Checklist</h4>
-              <ul class="viva-checklist space-y-3">
-                <li class="text-sm text-[#555555] leading-relaxed"><strong class="text-[#1a1a1a]">Grounded Generation:</strong> How do you prevent hallucinations? <br><em class="text-[#888888]">Answer:</em> Grounded prompting with context chunks + 0.32 similarity threshold guardrail.</li>
-                <li class="text-sm text-[#555555] leading-relaxed"><strong class="text-[#1a1a1a]">Chunking Strategy:</strong> What is your token strategy? <br><em class="text-[#888888]">Answer:</em> ~500 tokens with 50-token sliding window overlap preserving 1-indexed page metadata.</li>
-                <li class="text-sm text-[#555555] leading-relaxed"><strong class="text-[#1a1a1a]">Vector Database:</strong> Why ChromaDB? <br><em class="text-[#888888]">Answer:</em> Embedded, zero-latency local persistence with HNSW indexing on cosine space.</li>
-                <li class="text-sm text-[#555555] leading-relaxed"><strong class="text-[#1a1a1a]">Evaluation Metric:</strong> How did you measure performance? <br><em class="text-[#888888]">Answer:</em> Hit Rate@K comparing Vector vs Hybrid retrieval over ground-truth syllabus pages.</li>
-              </ul>
-            </div>
-          </div>
+        <div class="side-links">
+          <a href="/docs" target="_blank" class="side-link" data-testid="swagger-link">Swagger API</a>
+          <a href="#" class="side-link" data-go="benchmark">Viva Checklist</a>
+          <a href="#" class="side-link" data-go="ingest">Chunking Notes</a>
         </div>
-      </section>
 
-      <!-- TAB 4: CORPUS & CHUNKS MANAGER -->
-      <section class="tab-content" id="tab-documents" role="tabpanel">
-        <div class="documents-container space-y-6">
-          <div class="docs-header-card bg-white rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df] flex items-center justify-between">
+        <div class="theme-switch" role="group" aria-label="Theme">
+          <button type="button" data-set-theme="light" data-testid="theme-light">
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
+            </svg>Light
+          </button>
+          <button type="button" data-set-theme="dark" data-testid="theme-dark">
+            <svg viewBox="0 0 24 24">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+            </svg>Dark
+          </button>
+        </div>
+
+        <div class="profile-card">
+          <div class="profile-avatar">CS</div>
+          <div class="profile-meta">
+            <strong>MRSPTU</strong>
+            <span>B.Tech CSE · Sem 7</span>
+          </div>
+          <span class="profile-badge">Major</span>
+        </div>
+      </header>
+
+      <!-- Workspace -->
+      <div class="workspace">
+        <main class="main-container">
+          <div class="page-head">
             <div>
-              <h2 class="card-title text-xl font-bold tracking-tight text-[#1a1a1a]">Indexed Knowledge Base &amp; Corpus</h2>
-              <p class="card-desc text-sm text-[#555555] mt-1">Inspect all documents, subjects, units, and chunks stored in the persistent ChromaDB collection.</p>
+              <h1 class="page-title" id="page-title">What do you want to study today?</h1>
+              <p class="page-sub" id="page-subtitle">Pick a topic below or ask your own question — every answer is
+                grounded in your syllabus PDFs.</p>
             </div>
-            <button type="button" id="btn-refresh-corpus" class="nav-btn ghost-btn flex items-center gap-2 bg-white border border-[#eae6df] hover:border-[#1a1a1a] rounded-xl px-4 py-2.5 text-sm text-[#555555] hover:text-[#1a1a1a] transition-all">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <polyline points="1 20 1 14 7 14"></polyline>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            <button class="fab" data-go="ingest" title="Upload a new PDF" data-testid="page-add-btn">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 5v14M5 12h14" />
               </svg>
-              <span>Refresh Corpus</span>
             </button>
           </div>
 
-          <!-- Corpus Statistics Summary -->
-          <div class="corpus-stats-grid grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div class="cstat-card bg-white rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df] text-center">
-              <div class="cstat-val text-3xl font-bold text-[#1a1a1a] mb-1" id="cstat-docs">0</div>
-              <div class="cstat-label text-xs text-[#555555] font-medium">Active Documents</div>
+          <!-- TAB 1: STUDY ASSISTANT -->
+          <section class="tab-content active" id="tab-assistant" role="tabpanel">
+            <div class="topic-grid">
+              <button type="button" class="quick-chip topic-card"
+                data-prompt="Explain Nielsen's 10 Usability Heuristics in Human Computer Interaction"
+                data-testid="prompt-heuristics">
+                <span class="topic-icon c-green"><svg viewBox="0 0 24 24">
+                    <rect x="3" y="7" width="18" height="13" rx="2" />
+                    <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    <path d="M3 13h18" />
+                  </svg></span>
+                <span class="topic-title">Nielsen's 10 Heuristics</span>
+                <span class="topic-meta">HCI · Unit 3</span>
+              </button>
+              <button type="button" class="quick-chip topic-card"
+                data-prompt="Explain Decision Tree Induction and Entropy calculation"
+                data-testid="prompt-decision-tree">
+                <span class="topic-icon c-blue"><svg viewBox="0 0 24 24">
+                    <circle cx="12" cy="5" r="2.5" />
+                    <circle cx="6" cy="18" r="2.5" />
+                    <circle cx="18" cy="18" r="2.5" />
+                    <path d="M12 7.5v4M12 11.5 6.8 15.8M12 11.5l5.2 4.3" />
+                  </svg></span>
+                <span class="topic-title">Decision Tree Induction</span>
+                <span class="topic-meta">ML · Entropy</span>
+              </button>
+              <button type="button" class="quick-chip topic-card"
+                data-prompt="Compare Shneiderman's Golden Rules with Nielsen's Heuristics"
+                data-testid="prompt-golden-rules">
+                <span class="topic-icon c-red"><svg viewBox="0 0 24 24">
+                    <rect x="3" y="5" width="13" height="14" rx="2" />
+                    <path d="m16 10 5-3v10l-5-3" />
+                  </svg></span>
+                <span class="topic-title">Golden Rules vs Heuristics</span>
+                <span class="topic-meta">Compare</span>
+              </button>
+              <button type="button" class="quick-chip topic-card"
+                data-prompt="What are the course outcomes and units of Soft Computing in CSE Sem 7?"
+                data-testid="prompt-soft-computing">
+                <span class="topic-icon c-purple"><svg viewBox="0 0 24 24">
+                    <path d="M21 12A9 9 0 1 1 12 3v9z" />
+                    <path d="M15 3.5A9 9 0 0 1 20.5 9H15z" />
+                  </svg></span>
+                <span class="topic-title">Soft Computing Syllabus</span>
+                <span class="topic-meta">CSE · Sem 7</span>
+              </button>
             </div>
-            <div class="cstat-card bg-white rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df] text-center">
-              <div class="cstat-val text-3xl font-bold text-[#1a1a1a] mb-1" id="cstat-chunks">0</div>
-              <div class="cstat-label text-xs text-[#555555] font-medium">Total Indexed Chunks</div>
+
+            <form id="rag-query-form" class="query-form">
+              <div class="query-banner">
+                <svg class="banner-wave" viewBox="0 0 600 200" preserveAspectRatio="none">
+                  <path d="M0 120 C120 40 220 180 330 110 S520 30 600 90 V0 H0Z" />
+                  <path d="M0 160 C140 90 260 200 380 140 S540 80 600 130 V0 H0Z" />
+                </svg>
+                <div class="banner-copy">
+                  <h3>Ask anything from <span class="hl">your syllabus.</span></h3>
+                  <p>Hybrid retrieval, strict guardrails and exact textbook page citations.</p>
+                </div>
+                <div class="query-bar">
+                  <svg class="query-bar-icon" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m21 21-4.3-4.3" />
+                  </svg>
+                  <label for="query-input" class="sr-only">Student Question / Topic</label>
+                  <textarea id="query-input" class="custom-textarea" rows="1"
+                    placeholder="e.g. What is Entropy in Decision Trees?" required data-testid="query-input"></textarea>
+                  <button type="submit" id="btn-submit-query" class="submit-action-btn btn-lime"
+                    data-testid="query-submit">
+                    <span class="btn-spinner" id="query-spinner"></span>
+                    <span class="btn-text">Ask Arise</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="card tuning-card">
+                <div class="card-row-head">
+                  <h4>Retrieval settings</h4>
+                  <span class="muted-xs">Fine-tune what the assistant reads before it answers</span>
+                </div>
+                <div class="tuning-grid">
+                  <div class="select-group">
+                    <label for="filter-subject" class="field-label">Subject</label>
+                    <select id="filter-subject" class="custom-select" data-testid="filter-subject">
+                      <option value="all">All Subjects</option>
+                    </select>
+                  </div>
+                  <div class="select-group">
+                    <label for="filter-unit" class="field-label">Unit / Chapter</label>
+                    <select id="filter-unit" class="custom-select" data-testid="filter-unit">
+                      <option value="all">All Units</option>
+                    </select>
+                  </div>
+                  <div class="param-item">
+                    <div class="param-header"><span class="field-label">Top chunks (K)</span><span class="param-val"
+                        id="val-top-k">3</span></div>
+                    <input type="range" id="param-top-k" min="1" max="8" value="3" class="slider-input"
+                      data-testid="param-top-k">
+                  </div>
+                  <div class="param-item">
+                    <div class="param-header"><span class="field-label">Guardrail threshold</span><span
+                        class="param-val" id="val-threshold">0.32</span></div>
+                    <input type="range" id="param-threshold" min="0.10" max="0.70" step="0.02" value="0.32"
+                      class="slider-input" data-testid="param-threshold">
+                  </div>
+                </div>
+                <div class="mode-toggle-group">
+                  <label class="mode-option" id="mode-opt-hybrid" data-testid="mode-hybrid">
+                    <input type="radio" name="search_mode" value="hybrid" checked id="radio-hybrid">
+                    <div class="mode-card">
+                      <span class="mode-check"></span>
+                      <div>
+                        <span class="mode-title">Hybrid RRF <em class="badge-accent">Recommended</em></span>
+                        <p class="mode-desc">Dense vectors + BM25 keywords fused by Reciprocal Rank (k=60).</p>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="mode-option" id="mode-opt-vector" data-testid="mode-vector">
+                    <input type="radio" name="search_mode" value="vector" id="radio-vector">
+                    <div class="mode-card">
+                      <span class="mode-check"></span>
+                      <div>
+                        <span class="mode-title">Vector only</span>
+                        <p class="mode-desc">ChromaDB dense similarity without keyword fusion.</p>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </form>
+
+            <div class="card results-panel-card" id="results-panel" data-testid="results-panel">
+              <div class="empty-state-card" id="results-empty-state">
+                <div class="empty-icon-wrap">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M2 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H2z" />
+                    <path d="M22 4h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8z" />
+                  </svg>
+                </div>
+                <h3 class="empty-title">Your grounded answer appears here</h3>
+                <p class="empty-subtitle">Arise retrieves the most relevant passages, ranks them with RRF and writes a
+                  verified answer with page numbers.</p>
+                <div class="pipeline-feature-tags">
+                  <span class="feat-tag">500 / 50 token window</span>
+                  <span class="feat-tag">HNSW cosine</span>
+                  <span class="feat-tag">BM25 Okapi</span>
+                  <span class="feat-tag">Strict guardrail</span>
+                </div>
+              </div>
+
+              <div class="results-active-container" id="results-active-container" style="display: none;">
+                <div class="answer-meta-bar">
+                  <div class="answer-meta-left">
+                    <span class="meta-pill" id="res-mode-badge">Hybrid RRF</span>
+                    <span class="meta-pill" id="res-time-badge">45ms</span>
+                    <span class="meta-pill" id="res-citation-count-badge">3 Citations</span>
+                    <span class="meta-pill" id="res-params-badge"></span>
+                  </div>
+                  <button type="button" class="btn-inspect-chunks btn-soft" id="btn-toggle-chunks"
+                    data-testid="toggle-chunks">
+                    <svg viewBox="0 0 24 24">
+                      <path d="m16 18 6-6-6-6" />
+                      <path d="m8 6-6 6 6 6" />
+                    </svg>
+                    <span>Fusion ranks</span>
+                  </button>
+                </div>
+
+                <div class="fallback-alert-box" id="fallback-alert-box" style="display: none;"
+                  data-testid="fallback-alert">
+                  <div class="fallback-icon"><svg viewBox="0 0 24 24">
+                      <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+                      <path d="M12 9v4M12 17h.01" />
+                    </svg></div>
+                  <div class="fallback-content">
+                    <h4 class="fallback-title">Grounded guardrail alert</h4>
+                    <p class="fallback-desc" id="fallback-desc-text">The similarity score of the uploaded material did
+                      not meet the confidence threshold (<span id="fallback-threshold-val">0.32</span>). The system
+                      prevented an ungrounded hallucination and returned the exact required fallback message:</p>
+                    <div class="fallback-quote" id="fallback-quote-msg">"I'm sorry, I couldn't find the answer to this
+                      question in the provided documents."</div>
+                  </div>
+                </div>
+
+                <div class="answer-body-card">
+                  <div class="answer-header-row">
+                    <div class="answer-title-group">
+                      <span class="ai-avatar-badge">AI</span>
+                      <h3 class="answer-heading">Grounded academic response</h3>
+                    </div>
+                    <button class="copy-btn btn-soft" id="btn-copy-answer" title="Copy answer to clipboard"
+                      data-testid="copy-answer">
+                      <svg viewBox="0 0 24 24">
+                        <rect x="9" y="9" width="13" height="13" rx="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      <span>Copy</span>
+                    </button>
+                  </div>
+                  <div class="markdown-answer-content" id="answer-text-content" data-testid="answer-text"></div>
+                </div>
+
+                <div class="citations-container">
+                  <div class="citations-header">
+                    <h4 class="section-title">Source citations &amp; page references</h4>
+                    <span class="citation-subtext">Each snippet is pulled straight from the indexed PDF.</span>
+                  </div>
+                  <div class="citations-grid" id="citations-list" data-testid="citations-list"></div>
+                </div>
+
+                <div class="raw-chunks-drawer" id="raw-chunks-drawer" style="display: none;">
+                  <div class="drawer-header">
+                    <div>
+                      <h4 class="drawer-title">Retrieval &amp; fusion scorecard</h4>
+                      <p class="drawer-subtitle">Vector cosine vs BM25 vs RRF — raw score breakdown</p>
+                    </div>
+                    <button type="button" class="close-drawer-btn" id="btn-close-drawer" aria-label="Close"
+                      data-testid="close-drawer">
+                      <svg viewBox="0 0 24 24">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="table-responsive" id="raw-chunks-table-container"></div>
+                </div>
+              </div>
             </div>
-            <div class="cstat-card bg-white rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df] text-center">
-              <div class="cstat-val text-3xl font-bold text-[#1a1a1a] mb-1" id="cstat-subjects">0</div>
-              <div class="cstat-label text-xs text-[#555555] font-medium">Syllabus Subjects</div>
+          </section>
+
+          <!-- TAB 2: PDF SYLLABUS INGEST -->
+          <section class="tab-content" id="tab-ingest" role="tabpanel">
+            <div class="split">
+              <div class="card ingest-form-card">
+                <div class="card-head">
+                  <span class="topic-icon c-purple"><svg viewBox="0 0 24 24">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <path d="m17 8-5-5-5 5" />
+                      <path d="M12 3v12" />
+                    </svg></span>
+                  <div>
+                    <h2 class="card-title">Upload course material</h2>
+                    <p class="card-desc">Syllabus, lecture notes or textbooks — indexed into ChromaDB and BM25.</p>
+                  </div>
+                </div>
+
+                <form id="ingest-pdf-form" class="ingest-form">
+                  <div class="drop-zone" id="pdf-drop-zone"
+                    onclick="if(event.target.id!=='pdf-file-input'&&!event.target.closest('button'))document.getElementById('pdf-file-input').click()"
+                    data-testid="pdf-drop-zone">
+                    <input type="file" id="pdf-file-input" accept=".pdf" class="file-input-hidden" required
+                      data-testid="pdf-file-input">
+                    <div class="drop-zone-content">
+                      <div class="upload-cloud-icon"><svg viewBox="0 0 24 24">
+                          <path d="m16 16-4-4-4 4" />
+                          <path d="M12 12v9" />
+                          <path d="M20.4 18.4A5 5 0 0 0 18 9h-1.3A8 8 0 1 0 3 16.3" />
+                        </svg></div>
+                      <h3 class="drop-title">Drop your syllabus PDF here</h3>
+                      <p class="drop-subtitle">or click to browse · text-based PDFs only</p>
+                      <div class="selected-file-preview" id="selected-file-preview" style="display: none;">
+                        <svg viewBox="0 0 24 24">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <path d="M14 2v6h6" />
+                        </svg>
+                        <span class="file-name" id="file-name-label">filename.pdf</span>
+                        <button type="button" class="remove-file-btn" id="btn-remove-file" aria-label="Remove file"
+                          data-testid="remove-file">
+                          <svg viewBox="0 0 24 24">
+                            <path d="M18 6 6 18M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="form-row-two-col">
+                    <div class="input-field-group">
+                      <label for="input-subject" class="field-label">Subject / course *</label>
+                      <input type="text" id="input-subject" class="custom-input" placeholder="e.g. Operating Systems"
+                        required data-testid="input-subject">
+                    </div>
+                    <div class="input-field-group">
+                      <label for="input-unit" class="field-label">Unit / chapter *</label>
+                      <input type="text" id="input-unit" class="custom-input" placeholder="e.g. Unit 1" value="Unit 1"
+                        required data-testid="input-unit">
+                    </div>
+                  </div>
+
+                  <ol class="ingest-pipeline-explainer">
+                    <li class="explainer-step"><span class="step-num">1</span><span class="step-txt">PDFExtractor reads
+                        pages, keeping 1-indexed page numbers</span></li>
+                    <li class="explainer-step"><span class="step-num">2</span><span class="step-txt">TokenChunker splits
+                        ~500 tokens with 50-token overlap</span></li>
+                    <li class="explainer-step"><span class="step-num">3</span><span class="step-txt">ChromaDB stores
+                        embeddings, BM25Okapi indexes tokens</span></li>
+                  </ol>
+
+                  <button type="submit" id="btn-start-ingest" class="submit-action-btn btn-dark btn-block"
+                    data-testid="ingest-submit">
+                    <span class="btn-spinner" id="ingest-spinner"></span>
+                    <span class="btn-text">Process &amp; index PDF</span>
+                  </button>
+                </form>
+
+                <div class="ingest-success-card" id="ingest-result-card" style="display: none;"
+                  data-testid="ingest-result">
+                  <div class="success-icon-badge"><svg viewBox="0 0 24 24">
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg></div>
+                  <div class="success-details">
+                    <h4 class="success-title">Document indexed</h4>
+                    <p class="success-message" id="ingest-success-msg"></p>
+                    <div class="stat-pills-row">
+                      <span class="stat-pill" id="ingest-pages-stat">Pages: 0</span>
+                      <span class="stat-pill" id="ingest-chunks-stat">Chunks: 0</span>
+                      <span class="stat-pill" id="ingest-docid-stat">Doc ID: -</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card viva-info-card">
+                <span class="eyebrow">Viva knowledge</span>
+                <h3 class="viva-card-title">Ingestion &amp; chunking</h3>
+                <div class="viva-qa-block">
+                  <h4 class="viva-q">Why ~500 tokens with 50 overlap?</h4>
+                  <p class="viva-a">A 500-token window keeps a full definition or paragraph together, while the 50-token
+                    overlap stops concepts being cut mid-sentence at chunk boundaries.</p>
+                </div>
+                <div class="viva-qa-block">
+                  <h4 class="viva-q">How are citations grounded by page?</h4>
+                  <p class="viva-a"><code>pypdf</code> records the page of every extracted range. Each chunk carries
+                    <code>page_number</code> in its Chroma metadata, so citations map back to the exact textbook page.
+                  </p>
+                </div>
+                <div class="viva-qa-block">
+                  <h4 class="viva-q">Dual indexing</h4>
+                  <p class="viva-a">Chunks are stored in ChromaDB for semantic retrieval and registered in the BM25
+                    Okapi index for keyword retrieval — at the same time.</p>
+                </div>
+                <div class="sample-generator-card">
+                  <div>
+                    <h4 class="sample-title">Need a sample PDF?</h4>
+                    <p class="sample-desc">Generate a multi-page MRSPTU Operating Systems syllabus to test instantly.
+                    </p>
+                  </div>
+                  <button type="button" id="btn-generate-sample-pdf" class="btn-secondary-action btn-soft"
+                    data-testid="generate-sample-pdf">Generate Sample OS Syllabus PDF</button>
+                </div>
+              </div>
             </div>
-            <div class="cstat-card bg-white rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df] text-center">
-              <div class="cstat-val text-lg font-bold text-[#1a1a1a] mb-1">ChromaDB HNSW</div>
-              <div class="cstat-label text-xs text-[#555555] font-medium">Vector Index</div>
+          </section>
+
+          <!-- TAB 3: VIVA EVALUATION BENCHMARK -->
+          <section class="tab-content" id="tab-benchmark" role="tabpanel">
+            <div class="query-banner benchmark-hero-card">
+              <svg class="banner-wave" viewBox="0 0 600 200" preserveAspectRatio="none">
+                <path d="M0 120 C120 40 220 180 330 110 S520 30 600 90 V0 H0Z" />
+                <path d="M0 160 C140 90 260 200 380 140 S540 80 600 130 V0 H0Z" />
+              </svg>
+              <div class="banner-copy">
+                <span class="benchmark-badge">Capstone benchmark</span>
+                <h3>Vector search vs <span class="hl">Hybrid RRF.</span></h3>
+                <p>Hit Rate@K on ground-truth viva questions mapped to exact syllabus pages — use the default set or
+                  your own.</p>
+              </div>
+              <div class="benchmark-action-bar">
+                <div class="bench-field">
+                  <label for="eval-subject-filter">Subject</label>
+                  <select id="eval-subject-filter" class="custom-select dark" data-testid="eval-subject">
+                    <option value="all">All Subjects</option>
+                  </select>
+                </div>
+                <div class="bench-field">
+                  <label for="eval-top-k">Window</label>
+                  <select id="eval-top-k" class="custom-select dark" data-testid="eval-top-k">
+                    <option value="3" selected>Hit Rate@3</option>
+                    <option value="5">Hit Rate@5</option>
+                  </select>
+                </div>
+                <button type="button" id="btn-run-benchmark" class="run-benchmark-btn btn-lime"
+                  data-testid="run-benchmark">
+                  <span class="btn-spinner" id="bench-spinner"></span>
+                  <span class="btn-text">Run benchmark</span>
+                </button>
+              </div>
             </div>
+
+            <div class="card question-set-card">
+              <div class="card-row-head">
+                <div>
+                  <h4>Question set</h4>
+                  <span class="muted-xs">Pick which questions the benchmark runs on</span>
+                </div>
+                <div class="seg" role="group" aria-label="Question set">
+                  <button type="button" data-qset="default" class="is-on" data-testid="qset-default">Default ·
+                    20</button>
+                  <button type="button" data-qset="custom" data-testid="qset-custom">My questions · <span
+                      id="custom-q-count">0</span></button>
+                </div>
+              </div>
+              <form id="viva-q-form" class="viva-q-form" data-testid="viva-q-form">
+                <input type="text" id="viva-q-text" class="custom-input q-text"
+                  placeholder="Add a viva question, e.g. What is a deadlock?" required minlength="5"
+                  data-testid="viva-q-text">
+                <input type="number" id="viva-q-page" class="custom-input q-page" placeholder="Page" min="1" required
+                  data-testid="viva-q-page">
+                <select id="viva-q-subject" class="custom-select q-subject" data-testid="viva-q-subject">
+                  <option value="all">Any subject</option>
+                </select>
+                <input type="text" id="viva-q-unit" class="custom-input q-unit" placeholder="Unit (optional)"
+                  data-testid="viva-q-unit">
+                <button type="submit" class="btn-dark q-add" data-testid="viva-q-add">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>Add
+                </button>
+              </form>
+              <ul class="viva-q-list" id="viva-q-list" data-testid="viva-q-list"></ul>
+            </div>
+
+            <div class="scoreboard-grid" id="scoreboard-grid">
+              <div class="card metric-card">
+                <div class="metric-label">Dense vector hit rate</div>
+                <div class="metric-value" id="val-vector-hit-rate" data-testid="vector-hit-rate">--%</div>
+                <div class="metric-sub" id="val-vector-hits">Hits: 0 / 0 queries</div>
+                <div class="metric-bar-bg">
+                  <div class="metric-bar-fill vector-fill" id="bar-vector-fill" style="width: 0%;"></div>
+                </div>
+              </div>
+              <div class="card metric-card is-accent">
+                <div class="metric-label">Hybrid RRF hit rate</div>
+                <div class="metric-value" id="val-hybrid-hit-rate" data-testid="hybrid-hit-rate">--%</div>
+                <div class="metric-sub" id="val-hybrid-hits">Hits: 0 / 0 queries</div>
+                <div class="metric-bar-bg">
+                  <div class="metric-bar-fill hybrid-fill" id="bar-hybrid-fill" style="width: 0%;"></div>
+                </div>
+              </div>
+              <div class="card metric-card">
+                <div class="metric-label">Accuracy boost (Δ)</div>
+                <div class="metric-value delta-value" id="val-delta-improvement" data-testid="delta-improvement">+0.0%
+                </div>
+                <div class="metric-sub">Empirical retrieval advantage</div>
+                <span class="metric-tag-pill">Reciprocal Rank Fusion</span>
+              </div>
+            </div>
+
+            <div class="card benchmark-details-card">
+              <div class="card-row-head">
+                <h4>Per-query breakdown</h4>
+                <span class="muted-xs" id="benchmark-query-count">0 queries evaluated</span>
+              </div>
+              <div class="table-responsive">
+                <table class="benchmark-table" id="benchmark-results-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Question</th>
+                      <th>Expected</th>
+                      <th>Vector pages</th>
+                      <th>Vector</th>
+                      <th>Hybrid pages</th>
+                      <th>Hybrid</th>
+                      <th>Result</th>
+                    </tr>
+                  </thead>
+                  <tbody id="benchmark-table-body">
+                    <tr>
+                      <td colspan="8" class="table-empty">Run the benchmark to see per-query results.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="split">
+              <div class="card deepdive-card">
+                <span class="eyebrow">Deep dive</span>
+                <h3 class="viva-card-title">Why Hybrid RRF wins</h3>
+                <p class="viva-a"><strong>Dense vectors</strong> match paraphrases but can miss exact terms like "FCFS",
+                  "HRRN" or "SCAN".</p>
+                <p class="viva-a"><strong>BM25</strong> nails technical keywords and course codes but misses semantic
+                  variations.</p>
+                <p class="viva-a"><strong>RRF</strong> merges both lists by rank: <code>Σ 1 / (60 + rank(d))</code> — no
+                  score calibration needed.</p>
+              </div>
+              <div class="card deepdive-card">
+                <span class="eyebrow">Examiner checklist</span>
+                <h3 class="viva-card-title">Viva-ready answers</h3>
+                <ul class="viva-checklist">
+                  <li><strong>Hallucinations?</strong> Grounded prompting + 0.32 similarity guardrail.</li>
+                  <li><strong>Chunking?</strong> ~500 tokens, 50 overlap, 1-indexed page metadata.</li>
+                  <li><strong>Why ChromaDB?</strong> Embedded, local persistence with HNSW cosine index.</li>
+                  <li><strong>Metric?</strong> Hit Rate@K, Vector vs Hybrid over ground-truth pages.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- TAB 4: CORPUS & CHUNKS -->
+          <section class="tab-content" id="tab-documents" role="tabpanel">
+            <div class="card docs-header-card">
+              <div>
+                <h2 class="card-title">Indexed knowledge base</h2>
+                <p class="card-desc">Documents, subjects, units and chunks in the persistent ChromaDB collection.</p>
+              </div>
+              <button type="button" id="btn-refresh-corpus" class="btn-soft" data-testid="refresh-corpus">
+                <svg viewBox="0 0 24 24">
+                  <path d="M23 4v6h-6" />
+                  <path d="M1 20v-6h6" />
+                  <path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15" />
+                </svg>
+                <span>Refresh corpus</span>
+              </button>
+            </div>
+
+            <div class="corpus-stats-grid">
+              <div class="card cstat-card"><span class="topic-icon c-green"><svg viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <path d="M14 2v6h6" />
+                  </svg></span>
+                <div class="cstat-val" id="cstat-docs" data-testid="cstat-docs">0</div>
+                <div class="cstat-label">Active documents</div>
+              </div>
+              <div class="card cstat-card"><span class="topic-icon c-blue"><svg viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                  </svg></span>
+                <div class="cstat-val" id="cstat-chunks" data-testid="cstat-chunks">0</div>
+                <div class="cstat-label">Indexed chunks</div>
+              </div>
+              <div class="card cstat-card"><span class="topic-icon c-red"><svg viewBox="0 0 24 24">
+                    <path d="M2 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H2z" />
+                    <path d="M22 4h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8z" />
+                  </svg></span>
+                <div class="cstat-val" id="cstat-subjects" data-testid="cstat-subjects">0</div>
+                <div class="cstat-label">Subjects</div>
+              </div>
+              <div class="card cstat-card"><span class="topic-icon c-orange"><svg viewBox="0 0 24 24">
+                    <ellipse cx="12" cy="5" rx="8" ry="3" />
+                    <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
+                  </svg></span>
+                <div class="cstat-val small">HNSW</div>
+                <div class="cstat-label">ChromaDB vector index</div>
+              </div>
+            </div>
+
+            <div class="card corpus-subject-tree-card">
+              <div class="card-row-head">
+                <h4>Subject &amp; unit directory</h4>
+              </div>
+              <div class="subject-directory-grid" id="subject-units-directory" data-testid="subject-directory">
+                <div class="empty-tree-msg">No syllabus materials indexed yet. Use the "PDF Syllabus Ingest" tab to
+                  upload your first document.</div>
+              </div>
+            </div>
+          </section>
+
+          <footer class="app-footer">
+            <span>Arise · Department of Computer Science &amp; Engineering</span>
+            <span>FastAPI · ChromaDB · Rank-BM25 · Gemini</span>
+          </footer>
+        </main>
+
+        <!-- Feed Column -->
+        <aside class="feed" aria-label="Feed">
+          <div class="feed-head">
+            <div>
+              <h3>Feed</h3>
+              <p>Pipeline notes for your viva</p>
+            </div>
+            <button type="button" class="feed-refresh" id="feed-refresh" data-testid="feed-refresh">
+              <svg viewBox="0 0 24 24">
+                <path d="M23 4v6h-6" />
+                <path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10" />
+              </svg>
+              Refresh
+            </button>
           </div>
 
-          <!-- Subjects & Units Directory -->
-          <div class="corpus-subject-tree-card bg-white rounded-2xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#eae6df]">
-            <h3 class="section-title text-base font-semibold text-[#1a1a1a] mb-4">Subject &amp; Unit Directory</h3>
-            <div class="subject-directory-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" id="subject-units-directory">
-              <div class="empty-tree-msg text-sm text-[#888888]">No syllabus materials indexed yet. Use the "PDF Syllabus Ingest" tab to upload your first document.</div>
-            </div>
+          <div class="promo-card">
+            <h4>Hybrid benchmark is ready</h4>
+            <p>Compare Hit Rate@K live</p>
+            <button type="button" class="btn-lime" data-go="benchmark" data-testid="promo-open-benchmark">Open
+              now</button>
           </div>
-        </div>
-      </section>
 
-    </main>
-
-    <!-- Footer -->
-    <footer class="app-footer border-t border-[#e5e0d8] py-5 px-8 text-center">
-      <div class="footer-inner max-w-7xl mx-auto">
-        <p class="footer-brand text-xs font-medium text-[#888888]">Arise • Department of Computer Science &amp; Engineering</p>
-        <p class="footer-note text-xs text-[#aaaaaa] mt-0.5">B.Tech 7th Semester Major Project • Built with FastAPI, ChromaDB, Rank-BM25, and Gemini LLM</p>
+          <span class="feed-label">From the pipeline</span>
+          <div class="feed-list">
+            <article class="feed-item">
+              <div class="feed-author"><span class="feed-avatar a1">TC</span>
+                <div><strong>TokenChunker</strong><span>500 / 50 sliding window</span></div>
+              </div>
+              <p>Why a 50-token overlap keeps definitions from being cut in half.</p>
+              <div class="feed-foot"><span class="feed-stat"><svg viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  </svg>Ingest</span><button type="button" class="feed-open" data-go="ingest"
+                  data-testid="feed-open-chunker">Open</button></div>
+            </article>
+            <article class="feed-item">
+              <div class="feed-author"><span class="feed-avatar a2">RR</span>
+                <div><strong>Rank Fusion</strong><span>RRF · k = 60</span></div>
+              </div>
+              <p>Merging vector and keyword ranks without calibrating scores.</p>
+              <div class="feed-foot"><span class="feed-stat"><svg viewBox="0 0 24 24">
+                    <path d="M18 20V10M12 20V4M6 20v-6" />
+                  </svg>Benchmark</span><button type="button" class="feed-open" data-go="benchmark"
+                  data-testid="feed-open-rrf">Open</button></div>
+            </article>
+            <article class="feed-item">
+              <div class="feed-author"><span class="feed-avatar a3">GR</span>
+                <div><strong>Guardrail</strong><span>Threshold 0.32</span></div>
+              </div>
+              <p>Low-similarity questions return a fixed fallback instead of guessing.</p>
+              <div class="feed-foot"><span class="feed-stat"><svg viewBox="0 0 24 24">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  </svg>Assistant</span><button type="button" class="feed-open" data-go="assistant"
+                  data-testid="feed-open-guardrail">Open</button></div>
+            </article>
+            <article class="feed-item">
+              <div class="feed-author"><span class="feed-avatar a4">CH</span>
+                <div><strong>Corpus</strong><span>ChromaDB · HNSW</span></div>
+              </div>
+              <p>See every subject and unit currently in the knowledge base.</p>
+              <div class="feed-foot"><span class="feed-stat"><svg viewBox="0 0 24 24">
+                    <ellipse cx="12" cy="5" rx="8" ry="3" />
+                    <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
+                  </svg>Corpus</span><button type="button" class="feed-open" data-go="documents"
+                  data-testid="feed-open-corpus">Open</button></div>
+            </article>
+          </div>
+        </aside>
       </div>
-    </footer>
+    </div>
   </div>
 
   <!-- Notification Toast -->
-  <div class="toast-notification" id="toast-notification"></div>
+  <div class="toast-notification" id="toast-notification" data-testid="toast"></div>
 
-  <!-- Main JS Logic -->
-  <script src="/static/app.js"></script>
+  <!-- Main JS Logic (FastAPI serves /static/app.js; static preview serves app.js) -->
+  <script src="app.js?v=3"
+    onerror="var s=document.createElement('script');s.src='/static/app.js?v=3';document.body.appendChild(s);"></script>
+  <script src="extras.js?v=2"
+    onerror="var s=document.createElement('script');s.src='/static/extras.js?v=2';document.body.appendChild(s);"></script>
 
-  <!-- Cinematic Splash Screen Dismissal Logic -->
+  <!-- Shell navigation: rail/feed shortcuts + page heading sync -->
   <script>
-    (function() {
-      const splash = document.getElementById('cinematic-splash');
-      const introAnimation = document.getElementById('intro-animation');
-      let splashDismissed = false;
-
-      function fadeOutSplash() {
-        if (splashDismissed || !splash) return;
-        splashDismissed = true;
-        splash.classList.add('splash-hidden');
-        setTimeout(function() {
-          if (splash && splash.remove) {
-            splash.remove();
-          }
-        }, 800);
-      }
-
-      if (introAnimation) {
-        introAnimation.onended = function() {
-          fadeOutSplash();
-        };
-        introAnimation.onerror = function() {
-          fadeOutSplash();
-        };
-        // Explicitly trigger play to prevent browser pause states
-        const playPromise = introAnimation.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(function() {
-            // Autoplay safety catch - fallback timer will trigger if blocked
-          });
+    (function () {
+      var heads = {
+        assistant: ["What do you want to study today?", "Pick a topic below or ask your own question — every answer is grounded in your syllabus PDFs."],
+        ingest: ["Feed Arise a new syllabus", "Upload course PDFs — they're chunked, embedded and keyword-indexed in seconds."],
+        benchmark: ["Prove your retrieval accuracy", "Dense vector search vs Hybrid RRF — on the default set or your own viva questions."],
+        documents: ["Your knowledge base", "Every subject, unit and chunk currently indexed by Arise."]
+      };
+      function sync() {
+        var active = document.querySelector(".tab-button.active");
+        var tab = active ? active.getAttribute("data-tab") : "assistant";
+        document.querySelectorAll(".rail-btn[data-go]").forEach(function (r) {
+          r.classList.toggle("is-active", r.getAttribute("data-go") === tab);
+        });
+        if (heads[tab]) {
+          document.getElementById("page-title").textContent = heads[tab][0];
+          document.getElementById("page-subtitle").textContent = heads[tab][1];
         }
       }
+      document.querySelectorAll(".tab-button").forEach(function (b) {
+        b.addEventListener("click", function () { setTimeout(sync, 0); });
+      });
+      document.querySelectorAll("[data-go]").forEach(function (el) {
+        el.addEventListener("click", function (e) {
+          e.preventDefault();
+          var btn = document.getElementById("tab-btn-" + el.getAttribute("data-go"));
+          if (btn) btn.click();
+          var main = document.querySelector(".main-container");
+          if (main) main.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      });
+      var root = document.documentElement;
+      function setTheme(t) {
+        root.classList.add("theme-anim");
+        root.setAttribute("data-theme", t);
+        try { localStorage.setItem("arise-theme", t); } catch (e) { }
+        document.querySelectorAll("[data-set-theme]").forEach(function (b) {
+          b.classList.toggle("is-on", b.getAttribute("data-set-theme") === t);
+        });
+        setTimeout(function () { root.classList.remove("theme-anim"); }, 450);
+      }
+      document.querySelectorAll("[data-set-theme]").forEach(function (b) {
+        b.addEventListener("click", function () { setTheme(b.getAttribute("data-set-theme")); });
+      });
+      var themeToggle = document.querySelector("[data-theme-toggle]");
+      if (themeToggle) themeToggle.addEventListener("click", function () {
+        setTheme(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+      });
+      setTheme(root.getAttribute("data-theme") || "light");
 
-      // Fallback: If video does not play or fails, dismiss automatically after 6 seconds
-      setTimeout(function() {
-        fadeOutSplash();
-      }, 6000);
+      var benchBody = document.getElementById("benchmark-table-body");
+      var benchCount = document.getElementById("benchmark-query-count");
+      if (benchBody && benchCount && window.MutationObserver) {
+        new MutationObserver(function () {
+          var n = benchBody.querySelectorAll("tr").length;
+          var empty = benchBody.querySelector(".table-empty");
+          benchCount.textContent = (empty ? 0 : n) + " queries evaluated";
+        }).observe(benchBody, { childList: true });
+      }
+
+      var answerBox = document.getElementById("answer-text-content");
+      if (answerBox && window.MutationObserver) {
+        var answerObs = new MutationObserver(function () {
+          answerObs.disconnect();
+          answerBox.querySelectorAll("p").forEach(function (p) {
+            var lines = p.innerHTML.split(/<br\s*\/?>/i);
+            var out = "", list = false, para = [];
+            function flushPara() { if (para.length) { out += "<p>" + para.join("<br>") + "</p>"; para = []; } }
+            lines.forEach(function (raw) {
+              var line = raw.trim();
+              var h = line.match(/^#{1,6}\s+(.*)$/);
+              var li = line.match(/^(?:[*\-•]|\d+\.)\s+(.*)$/);
+              if (h || li) flushPara();
+              if (!li && list) { out += "</ul>"; list = false; }
+              if (h) { out += "<h4 class='ans-h'>" + h[1] + "</h4>"; }
+              else if (li) { if (!list) { out += "<ul class='ans-list'>"; list = true; } out += "<li>" + li[1] + "</li>"; }
+              else if (line === "---" || line === "***") { flushPara(); out += "<hr class='ans-hr'>"; }
+              else if (line) { para.push(line); }
+            });
+            flushPara();
+            if (list) out += "</ul>";
+            var wrap = document.createElement("div");
+            wrap.className = "ans-block";
+            wrap.innerHTML = out;
+            p.replaceWith(wrap);
+          });
+          answerObs.observe(answerBox, { childList: true });
+        });
+        answerObs.observe(answerBox, { childList: true });
+      }
+
+      var qInput = document.getElementById("query-input");
+      if (qInput) qInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          var f = document.getElementById("rag-query-form");
+          if (f && qInput.value.trim()) f.requestSubmit();
+        }
+      });
+
+      var feedRefresh = document.getElementById("feed-refresh");
+      if (feedRefresh) feedRefresh.addEventListener("click", function () {
+        feedRefresh.classList.add("spin");
+        setTimeout(function () { feedRefresh.classList.remove("spin"); }, 700);
+        var r = document.getElementById("btn-refresh-corpus");
+        if (r) r.click();
+      });
+    })();
+  </script>
+
+  <!-- Intro Splash Dismissal -->
+  <script>
+    (function () {
+      var splash = document.getElementById("cinematic-splash");
+      if (!splash) return;
+      var seen = false;
+      try { seen = sessionStorage.getItem("arise-intro") === "1"; sessionStorage.setItem("arise-intro", "1"); } catch (e) { }
+      function hide() {
+        if (!splash.parentNode) return;
+        splash.classList.add("splash-hidden");
+        setTimeout(function () { if (splash.parentNode) splash.remove(); }, 700);
+      }
+      if (seen) { splash.remove(); return; }
+      splash.addEventListener("click", hide);
+      setTimeout(hide, 2600);
     })();
   </script>
 </body>
+
 </html>
