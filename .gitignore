@@ -12,3 +12,11 @@ backup_before_fix/
 .vscode/
 *.log
 frontend/spiderman_intro.mp4
+.agent/
+.agents/
+.gsd/
+.gemini/
+adapters/
+GSD-STYLE.md
+PROJECT_RULES.md
+chroma_db_backup*/
