@@ -19,11 +19,20 @@ Explanation for Viva:
 """
 
 import re
-from typing import List, Optional, Tuple, Dict, Any
+import logging
+import traceback
+from typing import List, Optional, Tuple, Dict, Any, Set
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 from backend.app.config import settings
 from backend.app.models import Chunk, ChunkMetadata
+
+logger = logging.getLogger("rag.vector_store")
+
+
+class VectorSearchError(Exception):
+    """Raised when ChromaDB vector similarity search fails."""
+    pass
 
 
 class ChromaVectorStore:
@@ -40,6 +49,42 @@ class ChromaVectorStore:
             name=collection_name,
             metadata={"hnsw:space": "cosine"}
         )
+        self._cached_subjects: Optional[Set[str]] = None
+
+    def get_stored_subjects(self) -> List[str]:
+        """Return list of distinct subject names currently stored in ChromaDB."""
+        if hasattr(self, "_cached_subjects") and self._cached_subjects is not None:
+            return list(self._cached_subjects)
+        try:
+            data = self.collection.get(include=["metadatas"])
+            subjects = set()
+            for m in data.get("metadatas", []):
+                if m and m.get("subject"):
+                    subjects.add(str(m["subject"]).strip())
+            self._cached_subjects = subjects
+            return list(self._cached_subjects)
+        except Exception as e:
+            logger.warning(f"[VectorStore] Failed to query stored subjects: {e}")
+            return []
+
+    def resolve_subject(self, subject: Optional[str]) -> Optional[str]:
+        """
+        Case- and whitespace-insensitive resolution of a query subject to the exact
+        casing stored in ChromaDB metadata.
+        Returns the exact stored subject string if matched, else the trimmed subject or None.
+        """
+        if not subject:
+            return None
+        sub_clean = str(subject).strip()
+        if not sub_clean or sub_clean.lower() == "all":
+            return None
+
+        stored = self.get_stored_subjects()
+        sub_lower = sub_clean.lower()
+        for s in stored:
+            if s.lower() == sub_lower:
+                return s
+        return sub_clean
 
     def count(self) -> int:
         """Return total number of chunks currently stored in Chroma."""
@@ -83,6 +128,7 @@ class ChromaVectorStore:
             documents=documents,
             metadatas=metadatas
         )
+        self._cached_subjects = None
         return len(chunks)
 
     def _build_where_filter(
@@ -93,11 +139,13 @@ class ChromaVectorStore:
         """
         Builds ChromaDB 'where' dictionary for filtering by subject and/or unit.
         Ignores filters if value is None, empty, or 'all'.
+        Resolves subject case-insensitively against stored subjects.
         """
         filters = []
 
-        if subject and subject.strip().lower() != "all":
-            filters.append({"subject": subject.strip()})
+        resolved_subject = self.resolve_subject(subject)
+        if resolved_subject:
+            filters.append({"subject": resolved_subject})
 
         if unit is not None:
             unit_str = str(unit).strip().lower()
@@ -142,8 +190,8 @@ class ChromaVectorStore:
                 where=where_filter
             )
         except Exception as e:
-            # Fallback if where filter finds 0 matches in Chroma
-            return []
+            logger.error(f"[VectorStore] ChromaDB query failed: {e}\n{traceback.format_exc()}")
+            raise VectorSearchError(f"ChromaDB vector search failed: {e}") from e
 
         chunks_with_scores: List[Tuple[Chunk, float]] = []
 
@@ -282,3 +330,4 @@ class ChromaVectorStore:
     def delete_document(self, doc_id: str) -> None:
         """Delete all chunks belonging to a particular doc_id."""
         self.collection.delete(where={"doc_id": doc_id})
+        self._cached_subjects = None

@@ -22,11 +22,14 @@ Explanation for Viva:
    - "hybrid": Dense vector search + BM25 keyword search merged via RRF.
 """
 
+import logging
 from typing import List, Optional, Dict
 from backend.app.config import settings
 from backend.app.models import Chunk
-from backend.app.rag.vector_store import ChromaVectorStore
+from backend.app.rag.vector_store import ChromaVectorStore, VectorSearchError
 from backend.app.rag.bm25_search import BM25Index
+
+logger = logging.getLogger("rag.hybrid_search")
 
 
 class HybridSearchService:
@@ -60,13 +63,14 @@ class HybridSearchService:
             List of ranked Chunk objects.
         """
         mode_clean = (mode or "hybrid").strip().lower()
+        resolved_subject = self.vector_store.resolve_subject(subject)
 
         # Mode 1: Pure Vector Search
         if mode_clean == "vector":
-            return self._vector_search(query=query, subject=subject, unit=unit, top_k=top_k)
+            return self._vector_search(query=query, subject=resolved_subject, unit=unit, top_k=top_k)
 
         # Mode 2: Hybrid Search (Vector + BM25 fused with RRF)
-        return self._hybrid_rrf_search(query=query, subject=subject, unit=unit, top_k=top_k)
+        return self._hybrid_rrf_search(query=query, subject=resolved_subject, unit=unit, top_k=top_k)
 
     def _vector_search(
         self,
@@ -109,12 +113,16 @@ class HybridSearchService:
         candidate_k = max(top_k * 3, 10)
 
         # 1. Retrieve candidates from Vector Store
-        vector_candidates = self.vector_store.search(
-            query=query,
-            subject=subject,
-            unit=unit,
-            top_k=candidate_k
-        )
+        try:
+            vector_candidates = self.vector_store.search(
+                query=query,
+                subject=subject,
+                unit=unit,
+                top_k=candidate_k
+            )
+        except VectorSearchError as e:
+            logger.warning(f"[HybridSearch] Vector search failed ({e}), falling back to BM25-only.")
+            vector_candidates = []
 
         # 2. Retrieve candidates from BM25 Keyword Search
         bm25_candidates = self.bm25_index.search(
