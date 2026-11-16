@@ -321,7 +321,7 @@ function initMRSPTUApp() {
       const mode = modeInput ? modeInput.value : "hybrid";
       const subject = filterSubject ? filterSubject.value : "all";
       const unit = filterUnit ? filterUnit.value : "all";
-      const top_k = paramTopK ? parseInt(paramTopK.value, 10) : 3;
+      const top_k = paramTopK ? parseInt(paramTopK.value, 10) : 5;
       const threshold = paramThreshold ? parseFloat(paramThreshold.value) : 0.32;
 
       // UI Loading state
@@ -345,7 +345,7 @@ function initMRSPTUApp() {
           unit_filter: unit === "all" ? null : unit,
           mode: mode,
           strategy: mode === "hybrid" ? "hybrid_rrf" : "vector",
-          top_k: parseInt(top_k, 10) || 3,
+          top_k: parseInt(top_k, 10) || 5,
           threshold: parseFloat(threshold) || 0.32,
         };
 
@@ -413,7 +413,7 @@ function initMRSPTUApp() {
 
     // Used params badge: show top_k, threshold, and strategy used for this query
     if (resParamsBadge) {
-      const usedTopK = paramTopK ? paramTopK.value : 3;
+      const usedTopK = paramTopK ? paramTopK.value : 5;
       const usedThreshold = paramThreshold ? parseFloat(paramThreshold.value).toFixed(2) : "0.32";
       const usedStrategy = data.mode === "hybrid" ? "Hybrid RRF" : "Dense Vector";
       resParamsBadge.textContent = `🎛 Top ${usedTopK} chunks | Threshold: ${usedThreshold} | ${usedStrategy}`;

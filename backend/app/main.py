@@ -39,8 +39,50 @@ from backend.app.rag.chunker import TokenChunker
 from backend.app.rag.bm25_search import BM25Index
 from backend.app.rag.vector_store import ChromaVectorStore, VectorSearchError
 from backend.app.rag.hybrid_search import HybridSearchService
-from backend.app.rag.llm import GeminiAnswerGenerator, NOT_FOUND_MESSAGE
+from backend.app.rag.llm import GeminiAnswerGenerator, NOT_FOUND_MESSAGE, LLM_UNAVAILABLE_MESSAGE
 from backend.app.rag.guardrail import evaluate as guardrail_evaluate
+
+
+def expand_neighbor_chunks(
+    selected_chunks: List[Chunk],
+    all_chunks: List[Chunk],
+    cap: int,
+) -> List[Chunk]:
+    """
+    For each selected chunk, adds chunks of the same doc_id and unit with
+    page_number +- 1 to the context sent to the LLM.
+    Dedupes and caps total at cap (e.g. K + 3).
+    """
+    seen_ids = set()
+    expanded: List[Chunk] = []
+
+    # Preserve selected chunks first
+    for c in selected_chunks:
+        seen_ids.add(c.chunk_id)
+        expanded.append(c)
+
+    for c in selected_chunks:
+        doc_id = c.metadata.doc_id
+        unit = c.metadata.unit
+        page = c.metadata.page_number
+        if not doc_id or page is None:
+            continue
+
+        for cand in all_chunks:
+            if cand.chunk_id in seen_ids:
+                continue
+            cand_meta = cand.metadata
+            if (
+                cand_meta.doc_id == doc_id
+                and cand_meta.unit == unit
+                and cand_meta.page_number in (page - 1, page + 1)
+            ):
+                seen_ids.add(cand.chunk_id)
+                expanded.append(cand)
+                if len(expanded) >= cap:
+                    return expanded
+
+    return expanded
 
 
 # ---------------------------------------------------------
@@ -346,6 +388,7 @@ def query_rag(request: QueryRequest):
     # Step 3: Evaluate confidence guardrail and generate grounded answer with Gemini
     t_llm_start = time.time()
     is_fallback = False
+    fallback_message = None
 
     guardrail_decision = guardrail_evaluate(
         chunks=retrieved_chunks,
@@ -358,28 +401,46 @@ def query_rag(request: QueryRequest):
         answer = NOT_FOUND_MESSAGE
         is_fallback = True
         gemini_time_ms = 0.0
+        fallback_message = (
+            f"Retrieval relevance too low for '{search_mode}' search "
+            f"(guardrail threshold {threshold:.2f} not met: {guardrail_decision.reason}). "
+            "The system prevented an ungrounded hallucination."
+        )
     else:
+        # Prepare context chunks with optional neighbor-chunk expansion
+        context_chunks = retrieved_chunks
+        if settings.NEIGHBOR_EXPANSION and retrieved_chunks:
+            try:
+                all_chunks = vector_store.get_all_chunks()
+                context_chunks = expand_neighbor_chunks(
+                    selected_chunks=retrieved_chunks,
+                    all_chunks=all_chunks,
+                    cap=top_k + 3,
+                )
+            except Exception as exp_err:
+                print(f"[NeighborExpansion Warning] Expansion failed ({exp_err}), using retrieved chunks.")
+                context_chunks = retrieved_chunks
+
         try:
             answer = llm_generator.generate_answer(
                 query=query_text,
-                chunks=retrieved_chunks,
+                chunks=context_chunks,
                 threshold=threshold,
                 mode=search_mode,
             )
             if NOT_FOUND_MESSAGE.lower() in answer.lower():
                 is_fallback = True
+                fallback_message = (
+                    "The retrieved passages do not contain enough information to answer this question. "
+                    "The model refrained from guessing to avoid hallucination."
+                )
+            elif answer == LLM_UNAVAILABLE_MESSAGE:
+                is_fallback = False
         except Exception as e:
             print(f"[Main Query Error] LLM generation failed: {e}")
-            answer = f"Error: {e}"
-            is_fallback = True
+            answer = LLM_UNAVAILABLE_MESSAGE
+            is_fallback = False
         gemini_time_ms = round((time.time() - t_llm_start) * 1000, 2)
-
-    fallback_message = None
-    if is_fallback:
-        fallback_message = (
-            f"The similarity score of the uploaded material did not meet the confidence threshold ({threshold}). "
-            "The system prevented an ungrounded hallucination and returned the exact required fallback message:"
-        )
 
     execution_time_ms = round((time.time() - start_time) * 1000, 2)
     print(f"[Query Timing] Retrieval: {retrieval_time_ms}ms | LLM: {gemini_time_ms}ms | Total: {execution_time_ms}ms")

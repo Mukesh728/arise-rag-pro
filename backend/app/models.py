@@ -44,7 +44,7 @@ class QueryRequest(BaseModel):
     unit_filter: Optional[Union[str, int]] = None
     mode: Optional[str] = "hybrid" # "vector" or "hybrid"
     strategy: Optional[str] = "hybrid"
-    top_k: int = 3
+    top_k: int = 5
     threshold: Optional[float] = 0.32
 
     @model_validator(mode="before")
@@ -77,12 +77,12 @@ class QueryRequest(BaseModel):
                 try:
                     data["top_k"] = int(data["top_k"])
                 except Exception:
-                    data["top_k"] = 3
+                    data["top_k"] = 5
             elif "top_chunks" in data and data["top_chunks"] is not None:
                 try:
                     data["top_k"] = int(data["top_chunks"])
                 except Exception:
-                    data["top_k"] = 3
+                    data["top_k"] = 5
 
             # Threshold conversion
             if "threshold" in data and data["threshold"] is not None:

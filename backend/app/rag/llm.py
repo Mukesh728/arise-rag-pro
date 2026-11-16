@@ -29,19 +29,30 @@ from backend.app.rag.guardrail import evaluate as guardrail_evaluate
 
 # Predefined exact fallback message in professional English
 NOT_FOUND_MESSAGE = "I'm sorry, I couldn't find the answer to this question in the provided documents."
-
-MODEL_NAME = "gemini-3.5-flash"
+LLM_UNAVAILABLE_MESSAGE = (
+    "The language model is temporarily unavailable (quota or network). "
+    "Here are the most relevant passages from your notes."
+)
 
 
 class GeminiAnswerGenerator:
-    def __init__(self, api_key: Optional[str] = None, threshold: Optional[float] = None, model: str = MODEL_NAME):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        threshold: Optional[float] = None,
+        model: Optional[str] = None,
+    ):
         """
         Initialize the Gemini generator.
-        Reads API key from .env (via settings.GEMINI_API_KEY or os.getenv).
+        Reads API key and model from config/settings or environment variables.
         """
         self.api_key = api_key or settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
         self.threshold = threshold if threshold is not None else settings.SIMILARITY_THRESHOLD
-        self.model = model
+        self.model = (
+            model
+            or getattr(settings, "GEMINI_MODEL", None)
+            or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+        )
         http_options = types.HttpOptions(timeout=45000)
         self.client = genai.Client(api_key=self.api_key, http_options=http_options)
 
@@ -142,9 +153,9 @@ ANSWER:"""
                         time.sleep(delay)
                         continue
 
-                    # If non-retryable error or all retries exhausted, print and return error
+                    # If non-retryable error or all retries exhausted, log and return graceful fallback
                     print(f"[Gemini Error] API call failed: {e}")
-                    return f"Error: {e}"
+                    return LLM_UNAVAILABLE_MESSAGE
         finally:
             gemini_duration_ms = round((time.time() - t_gemini_start) * 1000, 2)
             print(f"[Timing LLM] Gemini total time: {gemini_duration_ms}ms")
