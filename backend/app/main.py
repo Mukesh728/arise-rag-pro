@@ -37,9 +37,10 @@ from backend.app.models import (
 from backend.app.rag.pdf_extractor import PDFExtractor
 from backend.app.rag.chunker import TokenChunker
 from backend.app.rag.bm25_search import BM25Index
-from backend.app.rag.vector_store import ChromaVectorStore
+from backend.app.rag.vector_store import ChromaVectorStore, VectorSearchError
 from backend.app.rag.hybrid_search import HybridSearchService
 from backend.app.rag.llm import GeminiAnswerGenerator, NOT_FOUND_MESSAGE
+from backend.app.rag.guardrail import evaluate as guardrail_evaluate
 
 
 # ---------------------------------------------------------
@@ -271,7 +272,7 @@ async def ingest_document(
     tags=["RAG Query"],
     summary="Ask a question against syllabus materials with citation tracking",
 )
-async def query_rag(request: QueryRequest):
+def query_rag(request: QueryRequest):
     """
     Processes student query using Vector Search or Hybrid Search (Vector + BM25 + RRF).
     Extracts citations and generates a grounded Gemini answer with strict page references.
@@ -302,6 +303,11 @@ async def query_rag(request: QueryRequest):
             unit=request.unit,
             mode=search_mode,
             top_k=top_k,
+        )
+    except VectorSearchError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Vector search service error: {str(e)}",
         )
     except Exception as e:
         raise HTTPException(
@@ -337,17 +343,18 @@ async def query_rag(request: QueryRequest):
             )
         )
 
-    # Step 3: Generate grounded answer with Gemini
+    # Step 3: Evaluate confidence guardrail and generate grounded answer with Gemini
     t_llm_start = time.time()
     is_fallback = False
-    valid_vector_scores = [
-        getattr(c, 'score', getattr(c, 'similarity', getattr(c, 'vector_score', getattr(c, 'similarity_score', None))))
-        for c in retrieved_chunks
-    ]
-    valid_vector_scores = [s for s in valid_vector_scores if s is not None]
-    max_vector_score = max(valid_vector_scores) if valid_vector_scores else 0.0
 
-    if not retrieved_chunks or max_vector_score < threshold:
+    guardrail_decision = guardrail_evaluate(
+        chunks=retrieved_chunks,
+        query=query_text,
+        threshold=threshold,
+        mode=search_mode,
+    )
+
+    if not guardrail_decision.passed:
         answer = NOT_FOUND_MESSAGE
         is_fallback = True
         gemini_time_ms = 0.0
@@ -357,6 +364,7 @@ async def query_rag(request: QueryRequest):
                 query=query_text,
                 chunks=retrieved_chunks,
                 threshold=threshold,
+                mode=search_mode,
             )
             if NOT_FOUND_MESSAGE.lower() in answer.lower():
                 is_fallback = True

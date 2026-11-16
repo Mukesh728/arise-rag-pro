@@ -7,7 +7,7 @@ Explanation for Viva:
      we inject ONLY the retrieved chunks into the prompt as the reference context.
    - The LLM is strictly instructed to answer ONLY from the provided material.
 2. Similarity Threshold Guardrail:
-   - If the top similarity score is less than SIMILARITY_THRESHOLD (from config/settings),
+   - If the retrieved chunks fail the confidence guardrail (evaluate() in rag/guardrail.py),
      it means the uploaded documents do not contain relevant content for this question.
    - In that case, we do NOT call the LLM and immediately return:
      "I'm sorry, I couldn't find the answer to this question in the provided documents."
@@ -21,9 +21,11 @@ import os
 import time
 from typing import List, Optional
 from google import genai
+from google.genai import types
 
 from backend.app.config import settings
 from backend.app.models import Chunk
+from backend.app.rag.guardrail import evaluate as guardrail_evaluate
 
 # Predefined exact fallback message in professional English
 NOT_FOUND_MESSAGE = "I'm sorry, I couldn't find the answer to this question in the provided documents."
@@ -40,7 +42,8 @@ class GeminiAnswerGenerator:
         self.api_key = api_key or settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
         self.threshold = threshold if threshold is not None else settings.SIMILARITY_THRESHOLD
         self.model = model
-        self.client = genai.Client(api_key=self.api_key)
+        http_options = types.HttpOptions(timeout=45000)
+        self.client = genai.Client(api_key=self.api_key, http_options=http_options)
 
     def generate_answer(
         self,
@@ -48,13 +51,15 @@ class GeminiAnswerGenerator:
         chunks: List[Chunk],
         threshold: Optional[float] = None,
         override_threshold: Optional[float] = None,
+        mode: str = "hybrid",
     ) -> str:
         """
         Generate grounded answer from retrieved chunks.
 
         Rules:
         1. If chunks is empty -> return NOT_FOUND_MESSAGE
-        2. If top similarity < threshold -> return NOT_FOUND_MESSAGE
+        2. Evaluate via guardrail (vector requires dense similarity >= threshold;
+           hybrid allows dense >= threshold or keyword coverage >= 60% with >= 2 words)
         3. Else -> prompt Gemini with strictly retrieved chunks and return the answer.
         """
         # Ensure threshold passed as argument is used, falling back to self.threshold
@@ -65,24 +70,14 @@ class GeminiAnswerGenerator:
         )
         threshold = actual_threshold
 
-        # Rule 1: No chunks retrieved
-        if not chunks:
-            return NOT_FOUND_MESSAGE
-
-        # Rule 2: Top similarity score check
-        valid_scores = [
-            getattr(c, 'score', getattr(c, 'similarity', getattr(c, 'vector_score', getattr(c, 'similarity_score', None))))
-            for c in chunks
-        ]
-        valid_scores = [s for s in valid_scores if s is not None]
-        top_similarity = max(valid_scores) if valid_scores else 0.0
-
-        print(f"[DEBUG LLM] Chunks received: {len(chunks)}")
-        print(f"[DEBUG LLM] Scores found: {[getattr(c, 'score', getattr(c, 'similarity', getattr(c, 'vector_score', None))) for c in chunks]}")
-        print(f"[DEBUG LLM] Top Similarity: {top_similarity} | Threshold: {threshold}")
-        print(f"[Threshold Check] Top: {top_similarity:.4f}, Threshold: {threshold:.4f}")
-
-        if top_similarity < threshold:
+        # Rule 1 & 2: Guardrail check
+        guardrail_result = guardrail_evaluate(
+            chunks=chunks,
+            query=query,
+            threshold=threshold,
+            mode=mode,
+        )
+        if not guardrail_result.passed:
             return NOT_FOUND_MESSAGE
 
         # Rule 3: Build grounded context prompt
@@ -106,6 +101,7 @@ IMPORTANT RULES:
    "{NOT_FOUND_MESSAGE}"
 4. When explaining the answer, cite the page number(s) (e.g., "[Page {chunks[0].metadata.page_number}]") so the student can verify it in their textbook/notes.
 5. Keep your tone academic, clear, and easy to understand for viva preparation.
+6. Keep your answer concise and focused (around 250 words), suitable for university viva preparation.
 
 --- REFERENCE MATERIAL ---
 {context_text}  
@@ -117,15 +113,16 @@ STUDENT QUESTION:
 ANSWER:"""
 
         t_gemini_start = time.time()
-        max_retries = 3
-        delay = 5
+        max_retries = 1
+        delay = 2
 
         try:
             for attempt in range(max_retries + 1):
                 try:
                     response = self.client.models.generate_content(
-                        model=MODEL_NAME,
-                        contents=prompt
+                        model=self.model,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(max_output_tokens=1500),
                     )
                     return response.text
                 except Exception as e:

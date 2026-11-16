@@ -330,6 +330,10 @@ function initMRSPTUApp() {
         btnSubmitQuery.disabled = true;
       }
       const requestStartTime = performance.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 90000); // 90 second timeout
 
       try {
         const payload = {
@@ -349,6 +353,7 @@ function initMRSPTUApp() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
+          signal: controller.signal,
         });
 
         const responseArrivalTime = performance.now();
@@ -363,9 +368,15 @@ function initMRSPTUApp() {
         state.lastQueryResponse = data;
         renderQueryResponse(data, roundTripLatencyMs);
       } catch (err) {
-        console.error("Query error:", err);
-        showToast(`Error: ${err.message}`, "error");
+        if (err.name === "AbortError") {
+          console.error("Query timed out after 90 seconds");
+          showToast("Request timed out after 90 seconds. The server took too long to answer. Please try again.", "error");
+        } else {
+          console.error("Query error:", err);
+          showToast(`Error: ${err.message}`, "error");
+        }
       } finally {
+        clearTimeout(timeoutId);
         if (btnSubmitQuery) {
           btnSubmitQuery.classList.remove("loading");
           btnSubmitQuery.disabled = false;
