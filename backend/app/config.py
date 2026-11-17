@@ -22,6 +22,7 @@ class Settings(BaseModel):
     APP_NAME: str = "Arise"
     APP_VERSION: str = "1.0.0"
     API_PREFIX: str = "/api"
+    ENABLE_DOCS: bool = Field(default_factory=lambda: os.getenv("ENABLE_DOCS", "true").lower() in ("true", "1", "yes"))
     
     # Vector store config ("chroma" or "pgvector")
     VECTOR_STORE_TYPE: str = os.getenv("VECTOR_STORE_TYPE", "chroma")

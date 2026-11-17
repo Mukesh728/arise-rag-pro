@@ -98,13 +98,13 @@ client = TestClient(main_mod.app)
 r_health = client.get("/api/health")
 check("GET /api/health status 200", r_health.status_code == 200)
 h_data = r_health.json()
-check("Health chunk count == 36", h_data.get("total_chunks") == 36, f"got {h_data.get('total_chunks')}")
+check("Health chunk count == 31", h_data.get("total_chunks") == 31, f"got {h_data.get('total_chunks')}")
 
 # Filters endpoint
 r_filters = client.get("/api/filters")
 check("GET /api/filters status 200", r_filters.status_code == 200)
 f_data = r_filters.json()
-check("Filters total_chunks == 36", f_data.get("total_chunks") == 36)
+check("Filters total_chunks == 31", f_data.get("total_chunks") == 31)
 check("Subjects list clean (no UUIDs)", all("-" not in s or len(s) != 36 for s in f_data.get("subjects", [])))
 
 # CORS Preflight

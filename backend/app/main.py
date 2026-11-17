@@ -125,6 +125,9 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="Grounded Study Assistant for MRSPTU Syllabus using Hybrid RAG (Vector + BM25 + RRF + Gemini)",
     lifespan=lifespan,
+    docs_url="/docs" if settings.ENABLE_DOCS else None,
+    redoc_url="/redoc" if settings.ENABLE_DOCS else None,
+    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
 )
 
 # Enable CORS for local frontend development and web clients
