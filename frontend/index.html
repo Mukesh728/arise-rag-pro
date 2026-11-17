@@ -953,21 +953,35 @@
     })();
   </script>
 
-  <!-- Intro Splash Dismissal -->
+  <!-- Intro Splash Dismissal (capped at 1200ms, skips on repeat visits or reduced motion) -->
   <script>
     (function () {
       var splash = document.getElementById("cinematic-splash");
       if (!splash) return;
       var seen = false;
-      try { seen = sessionStorage.getItem("arise-intro") === "1"; sessionStorage.setItem("arise-intro", "1"); } catch (e) { }
+      try {
+        seen = sessionStorage.getItem("arise-intro") === "1";
+        sessionStorage.setItem("arise-intro", "1");
+      } catch (e) { }
+      var reducedMotion = false;
+      try {
+        reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      } catch (e) { }
+
       function hide() {
-        if (!splash.parentNode) return;
+        if (!splash || !splash.parentNode) return;
         splash.classList.add("splash-hidden");
-        setTimeout(function () { if (splash.parentNode) splash.remove(); }, 700);
+        setTimeout(function () {
+          if (splash && splash.parentNode) splash.remove();
+        }, 300);
       }
-      if (seen) { splash.remove(); return; }
+
+      if (seen || reducedMotion) {
+        splash.remove();
+        return;
+      }
       splash.addEventListener("click", hide);
-      setTimeout(hide, 2600);
+      setTimeout(hide, 1200);
     })();
   </script>
 </body>

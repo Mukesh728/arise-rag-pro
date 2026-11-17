@@ -270,16 +270,24 @@ function initMRSPTUApp() {
     }, 3800);
   }
 
-  // Slider inputs value syncing
+  // Slider inputs value syncing (debounced via requestAnimationFrame to avoid layout thrashing)
   if (paramTopK && valTopK) {
+    let topKRaf = null;
     paramTopK.addEventListener("input", (e) => {
-      valTopK.textContent = e.target.value;
+      if (topKRaf) cancelAnimationFrame(topKRaf);
+      topKRaf = requestAnimationFrame(() => {
+        valTopK.textContent = e.target.value;
+      });
     });
   }
 
   if (paramThreshold && valThreshold) {
+    let threshRaf = null;
     paramThreshold.addEventListener("input", (e) => {
-      valThreshold.textContent = parseFloat(e.target.value).toFixed(2);
+      if (threshRaf) cancelAnimationFrame(threshRaf);
+      threshRaf = requestAnimationFrame(() => {
+        valThreshold.textContent = parseFloat(e.target.value).toFixed(2);
+      });
     });
   }
 
@@ -454,11 +462,32 @@ function initMRSPTUApp() {
         timestamp: Date.now(),
       });
 
-      // UI Loading state
+      // UI Loading state with smooth skeleton loader
       if (btnSubmitQuery) {
         btnSubmitQuery.classList.add("loading");
         btnSubmitQuery.disabled = true;
       }
+      if (resultsEmptyState) resultsEmptyState.style.display = "none";
+      if (resultsActiveContainer) resultsActiveContainer.style.display = "block";
+      if (fallbackAlertBox) fallbackAlertBox.style.display = "none";
+      if (answerTextContent) {
+        answerTextContent.innerHTML = `
+          <div class="skeleton-loader" aria-label="Searching syllabus and synthesizing answer...">
+            <div class="skeleton-line skeleton-title"></div>
+            <div class="skeleton-line" style="width: 96%"></div>
+            <div class="skeleton-line" style="width: 88%"></div>
+            <div class="skeleton-line" style="width: 92%"></div>
+            <div class="skeleton-line" style="width: 65%"></div>
+          </div>
+        `;
+      }
+      if (citationsList) {
+        citationsList.innerHTML = `
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+        `;
+      }
+
       const requestStartTime = performance.now();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
@@ -501,10 +530,28 @@ function initMRSPTUApp() {
         if (err.name === "AbortError") {
           console.error("Query timed out after 90 seconds");
           showToast("Request timed out after 90 seconds. The server took too long to answer. Please try again.", "error");
+          if (answerTextContent) {
+            answerTextContent.innerHTML = `
+              <div class="empty-state-card" style="padding: 20px; border-radius: var(--radius-md); background: var(--canvas); border: 1px solid var(--line);">
+                <h4 style="margin: 0 0 6px; color: var(--red); font-size: 14px; font-weight: 600;">Request Timed Out</h4>
+                <p style="margin: 0; color: var(--ink-2); font-size: 13px;">The retrieval request exceeded 90 seconds. Please check server load or try a more specific question.</p>
+              </div>
+            `;
+          }
         } else {
           console.error("Query error:", err);
           showToast(`Error: ${err.message}`, "error");
+          if (answerTextContent) {
+            answerTextContent.innerHTML = `
+              <div class="empty-state-card" style="padding: 20px; border-radius: var(--radius-md); background: var(--canvas); border: 1px solid var(--line);">
+                <h4 style="margin: 0 0 6px; color: var(--red); font-size: 14px; font-weight: 600;">Unable to Generate Response</h4>
+                <p style="margin: 0; color: var(--ink-2); font-size: 13px; line-height: 1.5;">${escapeHtml(err.message || "An unexpected error occurred while processing your request.")}</p>
+                <p style="margin: 8px 0 0; color: var(--muted); font-size: 11.5px;">Note: If Gemini API quota is exhausted, retrieval endpoints and benchmarks continue working with grounded snippets.</p>
+              </div>
+            `;
+          }
         }
+        if (citationsList) citationsList.innerHTML = "";
       } finally {
         clearTimeout(timeoutId);
         if (btnSubmitQuery) {
@@ -703,6 +750,13 @@ function initMRSPTUApp() {
       if (state.lastQueryResponse && state.lastQueryResponse.answer) {
         navigator.clipboard.writeText(state.lastQueryResponse.answer);
         showToast("Answer copied to clipboard!", "success");
+        const span = btnCopyAnswer.querySelector("span");
+        btnCopyAnswer.classList.add("btn-copied");
+        if (span) span.textContent = "Copied!";
+        setTimeout(() => {
+          btnCopyAnswer.classList.remove("btn-copied");
+          if (span) span.textContent = "Copy";
+        }, 1800);
       }
     });
   }
@@ -1045,15 +1099,38 @@ function initMRSPTUApp() {
     const hRate = ((report.hybrid_hit_rate || 0) * 100).toFixed(1);
     const delta = ((report.delta_improvement || 0) * 100).toFixed(1);
 
-    if (valVectorHitRate) valVectorHitRate.textContent = `${vRate}%`;
+    const isReduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function countUp(el, targetNum, prefix = "", suffix = "%") {
+      if (!el) return;
+      if (isReduced) {
+        el.textContent = `${prefix}${targetNum.toFixed(1)}${suffix}`;
+        return;
+      }
+      const startTime = performance.now();
+      const duration = 450;
+      function step(now) {
+        const p = Math.min((now - startTime) / duration, 1);
+        const ease = 1 - Math.pow(1 - p, 3);
+        const cur = (targetNum * ease).toFixed(1);
+        el.textContent = `${prefix}${cur}${suffix}`;
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    const vNum = parseFloat(vRate) || 0;
+    const hNum = parseFloat(hRate) || 0;
+    const dNum = parseFloat(delta) || 0;
+
+    countUp(valVectorHitRate, vNum, "", "%");
+    countUp(valHybridHitRate, hNum, "", "%");
+    countUp(valDeltaImprovement, Math.abs(dNum), dNum >= 0 ? "+" : "-", "%");
+
     if (valVectorHits) valVectorHits.textContent = `Hits: ${report.vector_hits || 0} / ${report.total_queries || 0} queries`;
     if (barVectorFill) barVectorFill.style.width = `${vRate}%`;
 
-    if (valHybridHitRate) valHybridHitRate.textContent = `${hRate}%`;
     if (valHybridHits) valHybridHits.textContent = `Hits: ${report.hybrid_hits || 0} / ${report.total_queries || 0} queries`;
     if (barHybridFill) barHybridFill.style.width = `${hRate}%`;
-
-    if (valDeltaImprovement) valDeltaImprovement.textContent = `${delta >= 0 ? "+" : ""}${delta}%`;
 
     // Render detailed comparison table
     if (!benchmarkTableBody) return;
