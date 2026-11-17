@@ -36,12 +36,12 @@ class Settings(BaseModel):
     CHUNK_OVERLAP_TOKENS: int = 50
     SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.32"))
     RRF_K: int = int(os.getenv("RRF_K", "60"))
-    DEFAULT_TOP_K: int = 5 if os.getenv("DEFAULT_TOP_K") in (None, "3") else int(os.getenv("DEFAULT_TOP_K", "5"))
+    DEFAULT_TOP_K: int = int(os.getenv("DEFAULT_TOP_K", "5"))
     NEIGHBOR_EXPANSION: bool = os.getenv("NEIGHBOR_EXPANSION", "true").lower() in ("true", "1", "yes")
     
     # LLM Settings
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "auto") # auto, gemini, openai, groq, mock
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", "")
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY", "")
     GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY", "")

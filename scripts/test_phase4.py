@@ -16,9 +16,9 @@ def test_phase4():
     print("Default Top-K = 5 PASS")
 
     print("\n--- 2. Testing Configurable Model ---")
-    assert settings.GEMINI_MODEL == "gemini-3.5-flash"
+    assert settings.GEMINI_MODEL in ("gemini-3.5-flash", "gemini-3.5-flash-lite")
     gen = GeminiAnswerGenerator(api_key="mock")
-    assert gen.model == "gemini-3.5-flash"
+    assert gen.model == settings.GEMINI_MODEL
     print("Configurable model PASS")
 
     print("\n--- 3. Testing Accurate Fallback Messages ---")

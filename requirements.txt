@@ -12,5 +12,5 @@ rank-bm25==0.2.2
 tiktoken==0.14.0
 pypdf==6.21.2
 
-# LLM Provider (google-genai is the new unified SDK; google-generativeai is unused)
+# LLM Provider (google-genai unified SDK)
 google-genai==2.32.0
