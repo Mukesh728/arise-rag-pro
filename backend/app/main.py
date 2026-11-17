@@ -15,7 +15,7 @@ import shutil
 from contextlib import asynccontextmanager
 from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status, Query
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -128,13 +128,79 @@ app = FastAPI(
 )
 
 # Enable CORS for local frontend development and web clients
+_allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "*")
+_allowed_origins = (
+    [o.strip() for o in _allowed_origins_raw.split(",") if o.strip()]
+    if _allowed_origins_raw != "*"
+    else ["*"]
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------
+# Optional Security: Admin Token, Rate Limiting, Max Upload
+# ---------------------------------------------------------
+_ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
+_RATE_LIMIT_PER_HOUR = int(os.getenv("RATE_LIMIT_PER_HOUR", "0"))  # 0 = disabled
+_MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "25"))
+
+# In-memory rate-limit counter (resets on restart; single-worker safe)
+from collections import defaultdict
+_rate_counter: Dict[str, list] = defaultdict(list)
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    path = request.url.path
+
+    # 1. Admin Token Check on protected paths
+    if _ADMIN_TOKEN:
+        is_protected = (
+            (request.method == "POST" and path.endswith("/ingest"))
+            or (request.method == "DELETE" and "/documents/" in path)
+            or (request.method == "POST" and path.endswith("/generate-sample-syllabus"))
+        )
+        if is_protected:
+            token = request.headers.get("X-Admin-Token", "")
+            if token != _ADMIN_TOKEN:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Invalid or missing admin token."},
+                )
+
+    # 2. Rate limit on query endpoint
+    if _RATE_LIMIT_PER_HOUR > 0 and path.endswith("/query") and request.method == "POST":
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        now = time.time()
+        cutoff = now - 3600
+        _rate_counter[client_ip] = [t for t in _rate_counter[client_ip] if t > cutoff]
+        if len(_rate_counter[client_ip]) >= _RATE_LIMIT_PER_HOUR:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Try again later."},
+            )
+        _rate_counter[client_ip].append(now)
+
+    # 3. Max upload size check
+    if path.endswith("/ingest") and request.method == "POST":
+        content_length = request.headers.get("content-length")
+        max_bytes = _MAX_UPLOAD_MB * 1024 * 1024
+        if content_length:
+            try:
+                if int(content_length) > max_bytes:
+                    return JSONResponse(
+                        status_code=413,
+                        content={"detail": f"File exceeds maximum allowed size of {_MAX_UPLOAD_MB}MB."},
+                    )
+            except ValueError:
+                pass
+
+    return await call_next(request)
 
 
 # ---------------------------------------------------------
@@ -207,6 +273,8 @@ async def ingest_document(
             detail="Only PDF files (.pdf) are supported.",
         )
 
+    max_bytes = _MAX_UPLOAD_MB * 1024 * 1024
+
     clean_subject = subject.strip()
     # Accept "1", "Unit 1", "UNIT-I", "II" etc. from the form field
     raw_unit = unit.strip()
@@ -238,6 +306,13 @@ async def ingest_document(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Uploaded file is empty.",
             )
+        if len(file_bytes) > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File exceeds maximum allowed size of {_MAX_UPLOAD_MB}MB.",
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

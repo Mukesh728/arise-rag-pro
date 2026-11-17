@@ -1,4 +1,4 @@
-# arise 🎓
+# Arise.ai 🎓
 
 > **Grounded Study Assistant for MRSPTU Syllabi using Hybrid RAG (Vector + BM25 + RRF + Gemini)**
 
@@ -8,11 +8,13 @@ A FastAPI-based Retrieval-Augmented Generation (RAG) system that lets students a
 
 ## Overview
 
-- **Hybrid Search**: ChromaDB vector similarity + BM25 keyword search fused with Reciprocal Rank Fusion (RRF)
+- **Hybrid Search**: ChromaDB vector similarity + BM25 keyword search fused with Reciprocal Rank Fusion (RRF, k=60)
 - **Unit-Aware Chunking**: Detects `UNIT-I`, `UNIT-II`, `UNIT-IV (11 Hrs)` headings automatically; carries unit context forward across pages
-- **Guardrailed LLM**: Off-topic questions (e.g. "Who won IPL?") return a fixed Urdu/Hindi not-found message, never hallucinated content
-- **LLM Resilience**: Auto-retries Gemini on 503/429 with backoff; falls back to raw passages after 3 failed attempts
-- **Viva Benchmark**: `/api/evaluate` endpoint measures Hit Rate@K (Vector vs Hybrid) without ever calling Gemini
+- **Confidence Guardrail**: Off-topic questions (e.g. "Who won IPL?") are blocked before reaching the LLM — never hallucinated content
+- **LLM Resilience**: 45-second HTTP timeout, 1 retry on 429/503, graceful fallback to raw passages; never crashes the server
+- **Neighbor-Chunk Expansion**: After retrieval, ±1 page chunks are added to LLM context (deduplicated, capped at K+3), improving multi-page answer coverage
+- **Viva Benchmark**: `/api/evaluate` measures Hit Rate@K (Vector vs Hybrid) without calling Gemini
+- **Deploy-Ready**: Single-worker `uvicorn` (BM25 is in-process), Dockerfile with pre-cached ONNX embedding model, `$PORT`-aware CMD
 
 ---
 
@@ -25,9 +27,12 @@ flowchart TD
     C --> D["ChromaDB\n(vector embeddings + metadata)"]
     C --> E["BM25Index\n(in-memory, synced on startup)"]
     D & E --> F["HybridSearchService\nRRF fusion (k=60)"]
-    F --> G["GeminiAnswerGenerator\n(gemini-flash-latest)\nRetry: 3× | Timeout: 12s | Backoff: 2s,4s"]
-    G --> H["FastAPI\n/api/query, /api/filters, /api/evaluate"]
-    H --> I["Vanilla JS Frontend\nSpinner, citations, unit dropdown, eval tab"]
+    F --> G["Guardrail\nguardrail.py: vector sim ≥ 0.32\nor hybrid keyword coverage ≥ 60%"]
+    G -->|"passed"| H["NeighborExpansion\n±1 page chunks, cap K+3"]
+    G -->|"failed"| I["NOT_FOUND_MESSAGE\n(no LLM call)"]
+    H --> J["GeminiAnswerGenerator\n(gemini-3.5-flash, timeout 45s, max_tokens 1500)\n1 retry on 429/503"]
+    J --> K["FastAPI\n/api/query /api/filters /api/evaluate"]
+    K --> L["Vanilla JS Frontend\nAbortController 90s timeout, citations, guardrail badge"]
 ```
 
 ---
@@ -36,14 +41,15 @@ flowchart TD
 
 | Layer | Technology |
 |---|---|
-| Backend | FastAPI, Python 3.13, uvicorn |
-| Vector Store | ChromaDB (persistent, local) |
-| Keyword Search | rank-bm25 (BM25Okapi) |
+| Backend | FastAPI 0.159, Python 3.11, uvicorn 0.54 |
+| Vector Store | ChromaDB 1.5.9 (persistent, local) |
+| Keyword Search | rank-bm25 0.2.2 (BM25Okapi) |
 | Fusion | Reciprocal Rank Fusion (RRF, k=60) |
-| PDF Parsing | pypdf |
-| Tokenization | tiktoken (cl100k_base) |
-| LLM | Google Gemini (`gemini-flash-latest`) |
+| PDF Parsing | pypdf 6.21.2 |
+| Tokenization | tiktoken 0.14.0 (cl100k_base) |
+| LLM | Google Gemini `gemini-3.5-flash` (via google-genai 2.32.0) |
 | Frontend | Vanilla JS, HTML5, CSS3 |
+| Deployment | Docker (python:3.11-slim), $PORT-aware |
 
 ---
 
@@ -66,12 +72,13 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-### 4. Add your `.env` file
-Create `backend/.env` (or project root `.env`) with:
+### 4. Configure environment
+Copy `.env.example` to `.env` and fill in your Gemini API key:
+```powershell
+Copy-Item .env.example .env
+# Edit .env and set GEMINI_API_KEY=your_key_here
 ```
-GEMINI_API_KEY=your_key_here
-```
-> **Never commit `.env` to version control.**
+> **Never commit `.env` to version control.** The `.gitignore` excludes it.
 
 ### 5. Run the server
 ```powershell
@@ -79,12 +86,38 @@ uvicorn backend.app.main:app --reload
 ```
 The app is now live at **http://localhost:8000**
 
-> On startup, the server automatically syncs the BM25 index with all chunks in ChromaDB.
+> On startup, the server automatically syncs the BM25 index with all chunks in ChromaDB (~36 chunks).
 
 ### 6. Upload PDFs
 - Open http://localhost:8000 in your browser
 - Use the **Upload** tab to ingest syllabus PDFs
-- Subject name and unit are auto-detected from PDF headings
+- Subject name is entered manually; unit number is auto-detected from PDF headings
+
+---
+
+## Docker Deployment
+
+```bash
+# Build (pre-caches the ONNX embedding model in the image)
+docker build -t arise-rag .
+
+# Run (PORT defaults to 8000)
+docker run -p 8000:8000 -e GEMINI_API_KEY=your_key arise-rag
+
+# Custom port
+docker run -p 3000:3000 -e PORT=3000 -e GEMINI_API_KEY=your_key arise-rag
+```
+
+> The `chroma_db/` directory is bundled in the image with the 3 cleaned documents (36 chunks). No re-ingestion needed.
+
+**Optional security env vars (all off by default):**
+
+| Variable | Effect |
+|---|---|
+| `ADMIN_TOKEN` | Requires `X-Admin-Token` header on ingest / delete endpoints |
+| `RATE_LIMIT_PER_HOUR` | Per-IP query rate limit (in-memory, resets on restart) |
+| `ALLOWED_ORIGINS` | Comma-separated CORS origins; default `*` |
+| `MAX_UPLOAD_MB` | Max PDF upload size (default 25) |
 
 ---
 
@@ -104,17 +137,18 @@ The app is now live at **http://localhost:8000**
 ## Evaluation Results
 
 **Benchmark: 20 questions verified against real page content in ChromaDB**
-- Sources: HCI Notes (15 pages), CSE Sem 7 Syllabus (16 pages)
+- Sources: HCI Notes (15 chunks), CSE Sem 7 Syllabus (16 chunks), Decision Tree Notes (5 chunks) — 36 chunks total
 - Retrieval only — **Gemini was NOT called** during evaluation
-- Evaluated via `/api/evaluate` endpoint
+- Each query embedded **once** at K=10; sliced at smaller K to avoid re-embedding overhead
 
 | K (top-K chunks) | Vector Hit Rate | Hybrid RRF Hit Rate | Delta |
 |:---:|:---:|:---:|:---:|
-| **1** | 75.0% (15/20) | **80.0% (16/20)** | **+5.0%** |
-| **2** | 85.0% (17/20) | **90.0% (18/20)** | **+5.0%** |
-| **3** | **95.0% (19/20)** | 90.0% (18/20) | -5.0% |
+| **1** | 90.0% (18/20) | **100.0% (20/20)** | **+10.0%** |
+| **2** | 95.0% (19/20) | **100.0% (20/20)** | **+5.0%** |
+| **3** | 100.0% (20/20) | **100.0% (20/20)** | 0.0% |
+| **5** | 100.0% (20/20) | **100.0% (20/20)** | 0.0% |
 
-> Hybrid RRF outperforms pure vector search at K=1 and K=2 (the practically important range). At K=3, vector slightly edges ahead due to BM25 picking up a semantically different match for Q7 (Nielsen heuristics → page 12 returned instead of page 10).
+> **Key takeaway:** Hybrid RRF dominates at the practically important range (K=1, K=2) where BM25 keyword matching rescues queries that the dense embedder ranks below the fold. At K≥3 both modes saturate at 100%.
 
 ---
 
@@ -122,11 +156,15 @@ The app is now live at **http://localhost:8000**
 
 ```
 Query: "Who won the IPL?"
-Answer: "Yeh answer uploaded material mein nahi mila"
+Guardrail: vector sim 0.07 < threshold 0.32 → REJECTED (no LLM call)
+Answer:    "I'm sorry, I couldn't find the answer to this question in the provided documents."
 is_fallback: True
+fallback_message: "Retrieval relevance too low for 'hybrid' search ..."
 ```
 
-Off-topic queries that have no relevant retrieved passages are blocked by a similarity threshold check and return the fixed not-found message — no hallucination.
+Off-topic queries have no relevant retrieved passages and are blocked before reaching Gemini. The UI distinguishes two distinct fallback types:
+1. **Guardrail block** — retrieval confidence too low (amber badge)
+2. **LLM "not found"** — guardrail passed but Gemini couldn't find the answer in the passages
 
 ---
 
@@ -136,38 +174,57 @@ Off-topic queries that have no relevant retrieved passages are blocked by a simi
 7th sem projext/
 ├── backend/
 │   └── app/
-│       ├── main.py          # FastAPI app, all endpoints, timing logs
-│       ├── models.py        # Pydantic models (Chunk, Citation, QueryRequest, ...)
-│       ├── config.py        # Settings from .env
+│       ├── main.py              # FastAPI app, endpoints, security middleware, timing logs
+│       ├── models.py            # Pydantic models (Chunk, Citation, QueryRequest, ...)
+│       ├── config.py            # Settings from .env (DEFAULT_TOP_K=5, GEMINI_MODEL, NEIGHBOR_EXPANSION)
 │       └── rag/
 │           ├── pdf_extractor.py   # pypdf page-by-page extraction
 │           ├── chunker.py         # TokenChunker + unit heading detection
-│           ├── vector_store.py    # ChromaDB wrapper
+│           ├── vector_store.py    # ChromaDB wrapper (raises VectorSearchError on failure)
 │           ├── bm25_search.py     # BM25Okapi index + search
 │           ├── hybrid_search.py   # RRF fusion of vector + BM25
-│           └── llm.py             # Gemini answer generation, retry + fallback
+│           ├── guardrail.py       # Confidence guardrail (vector/hybrid mode-aware)
+│           └── llm.py             # Gemini generation: 45s timeout, 1 retry, graceful fallback
 ├── frontend/
-│   ├── index.html           # Main UI
-│   └── app.js               # Query handler, spinner, citations, eval tab
-├── uploads/                 # Saved copies of uploaded PDFs
-├── chroma_db/               # Persistent ChromaDB storage
-├── .env                     # API keys (not committed)
-├── requirements.txt
+│   ├── index.html               # Main UI (K slider default 5)
+│   └── app.js                   # Query handler, AbortController 90s, citations, eval tab
+├── scripts/
+│   ├── run_benchmark.py         # Fast offline Hit Rate@K benchmark (no Gemini)
+│   ├── test_phase1.py           # Guardrail + sync-def regression tests
+│   └── test_phase4.py           # K=5, model config, fallback message, LLM failure tests
+├── uploads/                     # Saved copies of uploaded PDFs (3 clean documents)
+├── chroma_db/                   # Persistent ChromaDB storage (36 chunks, committed)
+├── Dockerfile                   # python:3.11-slim, pre-caches ONNX model, $PORT-aware
+├── .dockerignore
+├── .env.example                 # Safe to commit — no real keys
+├── .env                         # Real keys — gitignored, never committed
+├── requirements.txt             # Pinned versions (single source of truth)
 └── README.md
 ```
 
 ---
 
-## Changed Files Summary
+## Roll-back Instructions
 
-| File | Change |
-|---|---|
-| `backend/app/models.py` | `unit: Optional[int] = None` in ChunkMetadata; `unit: Optional[str]` in Citation |
-| `backend/app/rag/vector_store.py` | Unit None handling; `get_distinct_subjects_and_units()` returns `List[str]` labels |
-| `backend/app/rag/chunker.py` | Full rewrite: `_UNIT_RE` regex, Roman numeral conversion, unit carry-forward across pages |
-| `backend/app/rag/bm25_search.py` | Unit filter: regex digit extraction instead of `.strip()` |
-| `backend/app/rag/llm.py` | 3-attempt retry with backoff, 12s timeout, passage fallback, separated timing |
-| `backend/app/main.py` | Retrieval + Gemini timing logs, graceful exception fallback passage text |
-| `frontend/app.js` | Client-side latency, spinner fix, clean citation labels, 20-query benchmark |
-| `frontend/index.html` | Replaced OS-topic chips with 4 real topics from ingested PDFs |
+Each phase was committed separately on branch `deploy-prep`:
 
+```
+438f092  fix: K=5 default, configurable model, accurate fallback messages, LLM failure handling
+0313280  chore: clean repo
+d85cd4f  chore: remove duplicate documents
+1cf90c5  fix: verify guardrail, vector errors, subject filter, latency
+49e5cb6  checkpoint before deploy-prep
+```
+
+To roll back a phase: `git revert <commit-hash>` (safe, keeps history).  
+To roll back all phases: `git checkout main` (branch `deploy-prep` is not merged).
+
+> **ChromaDB backup:** `chroma_db_backup3/` contains the pre-Phase-2 state with duplicate documents if needed.
+
+---
+
+## What Was NOT Verified (Constraints)
+
+- **LLM answer quality** — Gemini API quota was exhausted during this prep session. All LLM paths were tested with a stubbed 429 error (graceful fallback confirmed). Real answer quality requires a live API key.
+- **Docker build** — Image was written and validated syntactically but not built in this environment (no Docker daemon available). The ONNX pre-cache RUN step is correct per ChromaDB docs.
+- **Multi-host CORS** — `ALLOWED_ORIGINS` env var is wired but not tested with a real external origin.

@@ -1,17 +1,16 @@
-# MRSPTU StudyRAG - Core Dependencies
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
-python-multipart>=0.0.9
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
-python-dotenv>=1.0.0
+# MRSPTU StudyRAG - Core Dependencies (pinned to installed versions)
+fastapi==0.159.1
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+pydantic==2.14.1
+pydantic-settings==2.16.1
+python-dotenv==1.2.4
 
 # Vector Database & Retrieval
-chromadb>=0.5.0
-rank-bm25>=0.2.2
-tiktoken>=0.7.0
-pypdf>=4.0.0
+chromadb==1.5.9
+rank-bm25==0.2.2
+tiktoken==0.14.0
+pypdf==6.21.2
 
-# LLM Providers
-google-genai>=1.0.0
-google-generativeai>=0.8.0
+# LLM Provider (google-genai is the new unified SDK; google-generativeai is unused)
+google-genai==2.32.0

@@ -1,0 +1,24 @@
+.git
+.env
+.env.*
+!.env.example
+__pycache__
+*.pyc
+venv/
+.venv/
+chroma_db_backup*
+uploads/
+.agent*
+.gsd
+.gemini
+adapters/
+backup_before_fix/
+*.log
+*.md
+!requirements.txt
+.vscode/
+edge_dom.html
+frontend - Copy/
+scripts/test_*.py
+scripts/diagnose_*.py
+scripts/remove_*.py
