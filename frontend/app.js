@@ -133,6 +133,128 @@ function initMRSPTUApp() {
   // Toast
   const toastNotification = document.getElementById("toast-notification");
 
+  // History Elements
+  const historyList = document.getElementById("history-list");
+  const historyClear = document.getElementById("history-clear");
+  const HISTORY_STORAGE_KEY = "arise-history";
+  const MAX_HISTORY_ITEMS = 10;
+
+  function getStoredHistory() {
+    try {
+      const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      console.warn("Failed to read arise-history from localStorage:", e);
+      return [];
+    }
+  }
+
+  function saveHistoryItem(item) {
+    if (!item || !item.question || !item.question.trim()) return;
+    try {
+      const current = getStoredHistory();
+      const trimmedQ = item.question.trim();
+      const filtered = current.filter(
+        (h) => h && h.question && h.question.trim().toLowerCase() !== trimmedQ.toLowerCase()
+      );
+      filtered.unshift({
+        question: trimmedQ,
+        mode: item.mode || "hybrid",
+        subject: item.subject || "all",
+        timestamp: item.timestamp || Date.now(),
+      });
+      const trimmedList = filtered.slice(0, MAX_HISTORY_ITEMS);
+      localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(trimmedList));
+      renderHistoryList(trimmedList);
+    } catch (e) {
+      console.warn("Failed to save arise-history to localStorage:", e);
+    }
+  }
+
+  function clearHistory() {
+    try {
+      localStorage.removeItem(HISTORY_STORAGE_KEY);
+    } catch (e) {
+      console.warn("Failed to clear arise-history from localStorage:", e);
+    }
+    renderHistoryList([]);
+  }
+
+  function renderHistoryList(items) {
+    if (!historyList) return;
+    historyList.innerHTML = "";
+    if (!items || items.length === 0) {
+      const emptyLi = document.createElement("li");
+      emptyLi.className = "history-empty";
+      emptyLi.textContent = "Questions you ask will show up here.";
+      historyList.appendChild(emptyLi);
+      return;
+    }
+
+    items.forEach((item) => {
+      const li = document.createElement("li");
+      li.className = "history-item";
+      li.setAttribute("role", "button");
+      li.setAttribute("tabindex", "0");
+      li.title = item.question;
+
+      const dot = document.createElement("span");
+      dot.className = "history-dot";
+      li.appendChild(dot);
+
+      const textWrap = document.createElement("div");
+      textWrap.className = "history-text";
+
+      const qSpan = document.createElement("span");
+      qSpan.className = "history-q";
+      qSpan.textContent = item.question;
+      textWrap.appendChild(qSpan);
+
+      if (item.subject && item.subject !== "all") {
+        const metaSpan = document.createElement("span");
+        metaSpan.className = "history-meta";
+        metaSpan.textContent = item.subject;
+        textWrap.appendChild(metaSpan);
+      }
+
+      li.appendChild(textWrap);
+
+      const onSelect = () => {
+        if (queryInput) {
+          queryInput.value = item.question;
+          const assistantBtn =
+            document.getElementById("tab-btn-assistant") ||
+            document.querySelector('[data-tab="assistant"]');
+          if (assistantBtn && !assistantBtn.classList.contains("active")) {
+            assistantBtn.click();
+          }
+          queryInput.focus();
+        }
+      };
+
+      li.addEventListener("click", onSelect);
+      li.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      });
+
+      historyList.appendChild(li);
+    });
+  }
+
+  if (historyClear) {
+    historyClear.addEventListener("click", () => {
+      clearHistory();
+    });
+  }
+
+  // Initial render of saved questions on page load
+  renderHistoryList(getStoredHistory());
+
   // ---------------------------------------------------------
   // Helper: Toast Notifications
   // ---------------------------------------------------------
@@ -323,6 +445,14 @@ function initMRSPTUApp() {
       const unit = filterUnit ? filterUnit.value : "all";
       const top_k = paramTopK ? parseInt(paramTopK.value, 10) : 5;
       const threshold = paramThreshold ? parseFloat(paramThreshold.value) : 0.32;
+
+      // Save to recent questions history immediately at submit time
+      saveHistoryItem({
+        question: query,
+        mode: mode,
+        subject: subject,
+        timestamp: Date.now(),
+      });
 
       // UI Loading state
       if (btnSubmitQuery) {

@@ -1213,6 +1213,129 @@ p {
   transform: translateX(3px);
 }
 
+/* Pipeline Decorative Topic Card */
+.topic-card.topic-card-pipeline {
+  cursor: default;
+}
+.topic-card.topic-card-pipeline:hover {
+  transform: none;
+  border-color: var(--line);
+  box-shadow: none;
+}
+.topic-card.topic-card-pipeline::after {
+  content: none;
+}
+.pipeline-track {
+  width: 100%;
+  margin-bottom: auto;
+  display: flex;
+  align-items: center;
+  padding: 4px 0 6px;
+}
+.pipeline-svg {
+  width: 100%;
+  max-width: 160px;
+  height: 32px;
+  overflow: visible;
+}
+.pipe-shape {
+  stroke-width: 1.6;
+  fill: none;
+  transition: opacity .3s, transform .3s;
+}
+.pipe-line {
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+.pipe-arrow {
+  stroke: var(--muted);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .5;
+}
+.pipe-chunk {
+  stroke-width: 1;
+  stroke: rgba(245, 158, 11, .5);
+  transition: opacity .3s, transform .3s;
+}
+.stroke-blue { stroke: var(--blue, #4f8cf0); }
+.stroke-lime { stroke: var(--lime, #d6f36a); }
+.stroke-purple { stroke: var(--violet, #6f64b0); }
+.fill-amber { fill: #f59e0b; }
+.pipe-pulse {
+  fill: none;
+  stroke: var(--lime, #d6f36a);
+  stroke-width: 1.2;
+  opacity: 0;
+  transform-origin: 76px 13px;
+}
+.pipe-step.step-doc {
+  animation: pipeStepDoc 4.5s ease-in-out infinite;
+  transform-origin: 10px 15px;
+}
+.pipe-step.step-chunks .pipe-chunk:nth-child(1) {
+  animation: pipeChunk 4.5s ease-in-out infinite;
+  animation-delay: 0.1s;
+}
+.pipe-step.step-chunks .pipe-chunk:nth-child(2) {
+  animation: pipeChunk 4.5s ease-in-out infinite;
+  animation-delay: 0.25s;
+}
+.pipe-step.step-chunks .pipe-chunk:nth-child(3) {
+  animation: pipeChunk 4.5s ease-in-out infinite;
+  animation-delay: 0.4s;
+}
+.pipe-pulse {
+  animation: pipePulse 4.5s ease-out infinite;
+  animation-delay: 1.8s;
+}
+.pipe-step.step-search {
+  animation: pipeSearch 4.5s ease-in-out infinite;
+  transform-origin: 76px 13px;
+}
+.pipe-step.step-answer {
+  animation: pipeAnswer 4.5s ease-in-out infinite;
+  transform-origin: 119px 13px;
+}
+@keyframes pipeStepDoc {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  10%, 25% { opacity: 1; transform: scale(1.08); }
+  35% { opacity: 0.7; transform: scale(1); }
+}
+@keyframes pipeChunk {
+  0%, 20%, 100% { opacity: 0.5; transform: scale(1); }
+  30%, 45% { opacity: 1; transform: scale(1.12); }
+  55% { opacity: 0.5; transform: scale(1); }
+}
+@keyframes pipeSearch {
+  0%, 40%, 100% { opacity: 0.65; transform: scale(1); }
+  50%, 65% { opacity: 1; transform: scale(1.1); }
+  75% { opacity: 0.65; transform: scale(1); }
+}
+@keyframes pipePulse {
+  0%, 45% { opacity: 0; transform: scale(0.7); }
+  55% { opacity: 0.8; transform: scale(1.2); }
+  70% { opacity: 0; transform: scale(1.6); }
+  100% { opacity: 0; }
+}
+@keyframes pipeAnswer {
+  0%, 65%, 100% { opacity: 0.65; transform: scale(1); }
+  75%, 90% { opacity: 1; transform: scale(1.08); }
+  98% { opacity: 0.65; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pipe-step.step-doc,
+  .pipe-step.step-chunks .pipe-chunk,
+  .pipe-pulse,
+  .pipe-step.step-search,
+  .pipe-step.step-answer {
+    animation: none !important;
+    opacity: 0.9 !important;
+    transform: none !important;
+  }
+}
+
 .topic-icon {
   display: grid;
   place-items: center;
