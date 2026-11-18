@@ -22,3 +22,12 @@ PROJECT_RULES.md
 chroma_db_backup*/
 edge_dom.html
 frontend - Copy/
+
+screenshots_baseline/
+screenshots_optimized/
+chroma_db_backup*/
+frontend - Copy/
+edge_dom.html
+perf_report_*.json
+final_report.md
+.env

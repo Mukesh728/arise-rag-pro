@@ -19,6 +19,7 @@ Explanation for Viva:
 
 import os
 import time
+import concurrent.futures
 from typing import List, Optional
 from google import genai
 from google.genai import types
@@ -33,6 +34,9 @@ LLM_UNAVAILABLE_MESSAGE = (
     "The language model is temporarily unavailable (quota or network). "
     "Here are the most relevant passages from your notes."
 )
+
+# Persistent executor pool with non-blocking timeout handling (avoids shutdown(wait=True) blocking)
+_LLM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
 
 class GeminiAnswerGenerator:
@@ -53,8 +57,18 @@ class GeminiAnswerGenerator:
             or getattr(settings, "GEMINI_MODEL", None)
             or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
         )
-        http_options = types.HttpOptions(timeout=45000)
-        self.client = genai.Client(api_key=self.api_key, http_options=http_options)
+        http_options = types.HttpOptions(
+            timeout=5000,
+            retry_options=types.HttpRetryOptions(attempts=1),
+        )
+        if self.api_key:
+            try:
+                self.client = genai.Client(api_key=self.api_key, http_options=http_options)
+            except Exception as e:
+                print(f"[Gemini Init Warning] Failed to initialize genai.Client: {e}")
+                self.client = None
+        else:
+            self.client = None
 
     def generate_answer(
         self,
@@ -123,39 +137,38 @@ STUDENT QUESTION:
 
 ANSWER:"""
 
+        # Offline Mock Mode support for testing when external API quota is unavailable
+        if getattr(settings, "LLM_PROVIDER", "").lower() == "mock" or os.getenv("MOCK_LLM", "false").lower() == "true":
+            snippets = [f"[Page {c.metadata.page_number}]: {c.text[:220].strip()}..." for c in chunks[:3]]
+            return (
+                f"**Grounded Synthesis (Offline Mock):**\n\n"
+                f"From your course syllabus reference material regarding '{query}':\n\n"
+                + "\n\n".join(f"- {s}" for s in snippets)
+            )
+
+        if not self.client or not self.api_key:
+            return LLM_UNAVAILABLE_MESSAGE
+
         t_gemini_start = time.time()
-        max_retries = 1
-        delay = 2
+
+        def _call_gemini():
+            return self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=types.GenerateContentConfig(max_output_tokens=1500),
+            ).text
 
         try:
-            for attempt in range(max_retries + 1):
-                try:
-                    response = self.client.models.generate_content(
-                        model=self.model,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(max_output_tokens=1500),
-                    )
-                    return response.text
-                except Exception as e:
-                    err_str = str(e).upper()
-                    is_retryable = (
-                        "429" in err_str
-                        or "503" in err_str
-                        or "RESOURCE_EXHAUSTED" in err_str
-                        or "UNAVAILABLE" in err_str
-                    )
-
-                    if is_retryable and attempt < max_retries:
-                        print(
-                            f"[Gemini Retry] Received 429/503 ({e}). "
-                            f"Retrying in {delay}s (attempt {attempt + 1}/{max_retries})..."
-                        )
-                        time.sleep(delay)
-                        continue
-
-                    # If non-retryable error or all retries exhausted, log and return graceful fallback
-                    print(f"[Gemini Error] API call failed: {e}")
-                    return LLM_UNAVAILABLE_MESSAGE
+            future = _LLM_EXECUTOR.submit(_call_gemini)
+            return future.result(timeout=4.0)
+        except concurrent.futures.TimeoutError:
+            print("[Gemini Timeout] LLM call exceeded 4.0 seconds. Returning grounded fallback context.")
+            return LLM_UNAVAILABLE_MESSAGE
+        except Exception as e:
+            # When quota is exhausted (429 RESOURCE_EXHAUSTED) or network drops,
+            # fail fast and return graceful fallback so the student immediately sees their citations!
+            print(f"[Gemini Error] API call failed: {e}")
+            return LLM_UNAVAILABLE_MESSAGE
         finally:
             gemini_duration_ms = round((time.time() - t_gemini_start) * 1000, 2)
             print(f"[Timing LLM] Gemini total time: {gemini_duration_ms}ms")
