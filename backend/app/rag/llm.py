@@ -34,6 +34,7 @@ LLM_UNAVAILABLE_MESSAGE = (
     "The language model is temporarily unavailable (quota or network). "
     "Here are the most relevant passages from your notes."
 )
+MODEL_NAME = getattr(settings, "GEMINI_MODEL", "gemini-3.5-flash-lite")
 
 # Persistent executor pool with non-blocking timeout handling (avoids shutdown(wait=True) blocking)
 _LLM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)

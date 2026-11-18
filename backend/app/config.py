@@ -46,6 +46,18 @@ class Settings(BaseModel):
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", "")
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY", "")
     GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY", "")
+
+    # Auth & Security
+    AUTH_ENABLED: bool = Field(default_factory=lambda: os.getenv("AUTH_ENABLED", "true").lower() in ("true", "1", "yes"))
+    USERS_DB_PATH: str = os.getenv("USERS_DB_PATH", "data/users.db")
+    SESSION_SECRET: Optional[str] = os.getenv("SESSION_SECRET", None)
+    COOKIE_SECURE: bool = Field(default_factory=lambda: os.getenv("COOKIE_SECURE", "false").lower() in ("true", "1", "yes"))
+    ALLOW_SIGNUP: bool = Field(default_factory=lambda: os.getenv("ALLOW_SIGNUP", "true").lower() in ("true", "1", "yes"))
+    ADMIN_EMAIL: Optional[str] = os.getenv("ADMIN_EMAIL", None)
+    ADMIN_PASSWORD: Optional[str] = os.getenv("ADMIN_PASSWORD", None)
+    ADMIN_TOKEN: Optional[str] = os.getenv("ADMIN_TOKEN", "")
+    DAILY_QUERY_LIMIT: int = int(os.getenv("DAILY_QUERY_LIMIT", "0"))
+    ENV: str = os.getenv("ENV", os.getenv("ENVIRONMENT", "development")).lower()
     
     class Config:
         arbitrary_types_allowed = True

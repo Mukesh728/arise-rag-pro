@@ -31,3 +31,5 @@ edge_dom.html
 perf_report_*.json
 final_report.md
 .env
+data/
+*.db

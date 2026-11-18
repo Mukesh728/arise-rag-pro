@@ -19,7 +19,66 @@ function initMRSPTUApp() {
     serverHealth: null,
     filterOptions: { subjects: [], units_by_subject: {}, total_documents: 0, total_chunks: 0 },
     lastQueryResponse: null,
+    currentUser: null,
   };
+
+  // ---------------------------------------------------------
+  // Auth Verification & Profile UI
+  // ---------------------------------------------------------
+  async function checkAuth() {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (res.status === 401) {
+        window.location.href = "/login";
+        return null;
+      }
+      if (!res.ok) return null;
+      const user = await res.json();
+      state.currentUser = user;
+      updateUserUI(user);
+      return user;
+    } catch (err) {
+      console.warn("Auth check warning:", err);
+      return null;
+    }
+  }
+
+  function updateUserUI(user) {
+    if (!user) return;
+    const profileEmail = document.getElementById("profile-email");
+    const profileRole = document.getElementById("profile-role");
+    const profileAvatar = document.getElementById("profile-avatar");
+    const railAvatar = document.getElementById("rail-avatar");
+
+    if (profileEmail) profileEmail.textContent = user.email || "";
+    if (profileRole) profileRole.textContent = user.role === "admin" ? "Administrator" : "Student";
+
+    const emailPrefix = (user.email || "").split("@")[0];
+    let initials = "CS";
+    if (emailPrefix) {
+      const parts = emailPrefix.split(/[._-]/).filter(Boolean);
+      if (parts.length >= 2) {
+        initials = (parts[0][0] + parts[1][0]).toUpperCase();
+      } else if (emailPrefix.length >= 2) {
+        initials = emailPrefix.substring(0, 2).toUpperCase();
+      } else {
+        initials = emailPrefix[0].toUpperCase();
+      }
+    }
+
+    if (profileAvatar) profileAvatar.textContent = initials;
+    if (railAvatar) railAvatar.textContent = initials;
+
+    // Non-admin users: hide the PDF Ingest tab/button
+    if (user.role !== "admin") {
+      const tabBtnIngest = document.getElementById("tab-btn-ingest");
+      const railIngest = document.querySelector('[data-go="ingest"]');
+      const fabIngest = document.querySelector('.fab[data-go="ingest"]');
+      if (tabBtnIngest) tabBtnIngest.style.display = "none";
+      if (railIngest) railIngest.style.display = "none";
+      if (fabIngest) fabIngest.style.display = "none";
+    }
+  }
 
   // ---------------------------------------------------------
   // 1. Tab Switching Logic - REGISTERED FIRST BEFORE ANY FETCH
@@ -157,6 +216,17 @@ function initMRSPTUApp() {
     adminTokenInput.value = getAdminToken();
     adminTokenInput.addEventListener("input", (e) => {
       setAdminToken(e.target.value.trim());
+    });
+  }
+
+  // Logout Button
+  const btnLogout = document.getElementById("btn-logout");
+  if (btnLogout) {
+    btnLogout.addEventListener("click", async () => {
+      try {
+        await fetch("/api/auth/logout", { method: "POST" });
+      } catch (e) {}
+      window.location.href = "/login";
     });
   }
 
@@ -1259,8 +1329,10 @@ function initMRSPTUApp() {
   }
 
   // ---------------------------------------------------------
-  // Initial Data Fetching (Health & Metadata Filters)
+  // Initial Data Fetching (Auth Check, Health & Metadata Filters)
   // ---------------------------------------------------------
+  checkAuth();
+
   try {
     fetchHealth();
   } catch (err) {

@@ -18,10 +18,17 @@ from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.app.config import settings
+from backend.app.auth import (
+    auth_router,
+    init_db,
+    bootstrap_admin,
+    get_current_user,
+    check_and_increment_daily_query,
+)
 from backend.app.models import (
     Chunk,
     ChunkMetadata,
@@ -106,9 +113,16 @@ chunker = TokenChunker(
 async def lifespan(app: FastAPI):
     """
     On startup:
-    Synchronizes in-memory BM25 index with all chunks persisted in Chroma.
-    This guarantees BM25 keyword search is immediately available without re-uploading PDFs.
+    1. Initializes SQLite auth database & bootstraps admin if configured.
+    2. Validates production secret if ENV=production and AUTH_ENABLED=true.
+    3. Synchronizes in-memory BM25 index with all chunks persisted in Chroma.
     """
+    init_db()
+    bootstrap_admin()
+    if settings.ENV == "production" and settings.AUTH_ENABLED:
+        if not os.getenv("SESSION_SECRET"):
+            raise RuntimeError("SESSION_SECRET must be set when ENV=production and AUTH_ENABLED=true")
+
     try:
         existing_chunks = vector_store.get_all_chunks()
         bm25_index.build_index(existing_chunks)
@@ -131,20 +145,28 @@ app = FastAPI(
     openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
 )
 
-# Enable CORS for local frontend development and web clients
+# Authentication Router
+app.include_router(auth_router)
+
+# Enable CORS (never combine wildcard origin with allow_credentials)
 _allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "*")
-_allowed_origins = (
-    [o.strip() for o in _allowed_origins_raw.split(",") if o.strip()]
-    if _allowed_origins_raw != "*"
-    else ["*"]
-)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if _allowed_origins_raw != "*":
+    _allowed_origins = [o.strip() for o in _allowed_origins_raw.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"^https?://.*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # ---------------------------------------------------------
 # Optional Security: Admin Token, Rate Limiting, Max Upload
@@ -161,23 +183,58 @@ _rate_counter: Dict[str, list] = defaultdict(list)
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     path = request.url.path
+    auth_enabled = os.getenv("AUTH_ENABLED", "true").lower() in ("true", "1", "yes")
 
-    # 1. Admin Token Check on protected paths
-    if _ADMIN_TOKEN:
-        is_protected = (
-            (request.method == "POST" and path.endswith("/ingest"))
-            or (request.method == "DELETE" and "/documents/" in path)
-            or (request.method == "POST" and path.endswith("/generate-sample-syllabus"))
-        )
-        if is_protected:
-            token = request.headers.get("X-Admin-Token", "")
-            if not hmac.compare_digest(token, _ADMIN_TOKEN):
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "Invalid or missing admin token."},
+    # 1. API Protection (when AUTH_ENABLED is True)
+    if path.startswith("/api/"):
+        is_exempt = path == "/api/health" or path.startswith("/api/auth/")
+        if not is_exempt:
+            if auth_enabled:
+                current_user = get_current_user(request)
+                if not current_user:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "Not authenticated"},
+                    )
+
+                is_admin_endpoint = (
+                    (request.method == "POST" and path.endswith("/ingest"))
+                    or (request.method == "DELETE" and "/documents/" in path)
+                    or (request.method == "POST" and path.endswith("/generate-sample-syllabus"))
                 )
+                if is_admin_endpoint:
+                    is_admin_user = current_user.get("role") == "admin"
+                    token = request.headers.get("X-Admin-Token", "")
+                    has_valid_token = bool(_ADMIN_TOKEN and hmac.compare_digest(token, _ADMIN_TOKEN))
+                    if not (is_admin_user or has_valid_token):
+                        return JSONResponse(
+                            status_code=403,
+                            content={"detail": "Admin privileges required."},
+                        )
 
-    # 2. Rate limit on query endpoint (proxy-aware + bounded memory)
+                if path.endswith("/query") and request.method == "POST":
+                    if not check_and_increment_daily_query(current_user["id"]):
+                        return JSONResponse(
+                            status_code=429,
+                            content={"detail": "Daily query limit reached"},
+                        )
+            else:
+                # Phase A fallback if AUTH_ENABLED is disabled
+                if _ADMIN_TOKEN:
+                    is_protected = (
+                        (request.method == "POST" and path.endswith("/ingest"))
+                        or (request.method == "DELETE" and "/documents/" in path)
+                        or (request.method == "POST" and path.endswith("/generate-sample-syllabus"))
+                    )
+                    if is_protected:
+                        token = request.headers.get("X-Admin-Token", "")
+                        if not hmac.compare_digest(token, _ADMIN_TOKEN):
+                            return JSONResponse(
+                                status_code=403,
+                                content={"detail": "Invalid or missing admin token."},
+                            )
+
+    # 2. Hourly Rate limit on query endpoint (proxy-aware + bounded memory)
     if _RATE_LIMIT_PER_HOUR > 0 and path.endswith("/query") and request.method == "POST":
         forwarded_for = request.headers.get("X-Forwarded-For")
         if forwarded_for:
@@ -220,15 +277,36 @@ async def security_middleware(request: Request, call_next):
 
 
 # ---------------------------------------------------------
-# Frontend Static Mounting & Health Endpoints
+# Frontend Static Mounting & Page Routes
 # ---------------------------------------------------------
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
 if os.path.exists(frontend_dir):
     app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
 
+@app.get("/login", include_in_schema=False)
+async def serve_login(request: Request):
+    """Serves the login / register page or redirects to / if already logged in."""
+    auth_enabled = os.getenv("AUTH_ENABLED", "true").lower() in ("true", "1", "yes")
+    if auth_enabled:
+        user = get_current_user(request)
+        if user:
+            return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+    if os.path.exists(frontend_dir):
+        login_file = os.path.join(frontend_dir, "login.html")
+        if os.path.exists(login_file):
+            return FileResponse(login_file)
+    return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
 @app.get("/", include_in_schema=False)
-async def serve_index():
-    """Serves the interactive MRSPTU StudyRAG Web Interface."""
+async def serve_index(request: Request):
+    """Serves the interactive MRSPTU StudyRAG Web Interface or redirects to /login if unauthenticated."""
+    auth_enabled = os.getenv("AUTH_ENABLED", "true").lower() in ("true", "1", "yes")
+    if auth_enabled:
+        user = get_current_user(request)
+        if not user:
+            return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+
     if os.path.exists(frontend_dir):
         index_file = os.path.join(frontend_dir, "index.html")
         if os.path.exists(index_file):

@@ -1023,6 +1023,28 @@ p {
   border-radius: 6px;
 }
 
+.btn-logout {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  color: var(--side-dim);
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.btn-logout:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
 /* ============ Workspace ============ */
 .workspace {
   flex: 1;
