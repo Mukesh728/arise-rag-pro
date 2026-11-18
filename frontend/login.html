@@ -273,7 +273,8 @@
       font-weight: 500;
       color: var(--pale-blue);
       opacity: 0.85;
-      margin-bottom: 2px;
+      margin-bottom: 4px;
+      line-height: 1.2;
       letter-spacing: 0.01em;
       pointer-events: none;
     }
@@ -287,16 +288,31 @@
     .field-input {
       width: 100%;
       background: transparent;
+      background-clip: padding-box;
       border: none;
       outline: none;
-      color: #ffffff;
+      color: #F6EBC8;
       font-size: 14.5px;
       font-weight: 500;
       padding: 2px 0;
+      color-scheme: dark;
     }
 
     .field-input::placeholder {
       color: rgba(184, 196, 217, 0.4);
+    }
+
+    /* Browser autofill override to preserve frosted-glass styling */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active {
+      -webkit-text-fill-color: #F6EBC8;
+      caret-color: #F6EBC8;
+      -webkit-box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.08) inset;
+      box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.08) inset;
+      transition: background-color 9999s ease-in-out 0s;
+      border-radius: inherit;
     }
 
     .field-icon {

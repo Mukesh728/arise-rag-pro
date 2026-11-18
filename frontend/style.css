@@ -1691,12 +1691,26 @@ button:disabled {
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.08);
+  background-clip: padding-box;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   font-size: 13px;
-  color: #ffffff;
+  color: #F6EBC8;
+  color-scheme: dark;
   outline: none;
   transition: border-color .2s, box-shadow .2s, background-color .2s;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #F6EBC8;
+  caret-color: #F6EBC8;
+  -webkit-box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.08) inset;
+  box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.08) inset;
+  transition: background-color 9999s ease-in-out 0s;
+  border-radius: inherit;
 }
 
 .custom-select {
