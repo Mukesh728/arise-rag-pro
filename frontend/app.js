@@ -50,7 +50,10 @@ function initMRSPTUApp() {
     const profileAvatar = document.getElementById("profile-avatar");
     const railAvatar = document.getElementById("rail-avatar");
 
-    if (profileEmail) profileEmail.textContent = user.email || "";
+    if (profileEmail) {
+      profileEmail.textContent = user.email || "";
+      profileEmail.title = user.email || "";
+    }
     if (profileRole) profileRole.textContent = user.role === "admin" ? "Administrator" : "Student";
 
     const emailPrefix = (user.email || "").split("@")[0];
@@ -69,15 +72,13 @@ function initMRSPTUApp() {
     if (profileAvatar) profileAvatar.textContent = initials;
     if (railAvatar) railAvatar.textContent = initials;
 
-    // Non-admin users: hide the PDF Ingest tab/button
-    if (user.role !== "admin") {
-      const tabBtnIngest = document.getElementById("tab-btn-ingest");
-      const railIngest = document.querySelector('[data-go="ingest"]');
-      const fabIngest = document.querySelector('.fab[data-go="ingest"]');
-      if (tabBtnIngest) tabBtnIngest.style.display = "none";
-      if (railIngest) railIngest.style.display = "none";
-      if (fabIngest) fabIngest.style.display = "none";
-    }
+    // Ensure PDF Ingest tab and action buttons remain accessible
+    const tabBtnIngest = document.getElementById("tab-btn-ingest");
+    const railIngest = document.querySelector('[data-go="ingest"]');
+    const fabIngest = document.querySelector('.fab[data-go="ingest"]');
+    if (tabBtnIngest) tabBtnIngest.style.display = "";
+    if (railIngest) railIngest.style.display = "";
+    if (fabIngest) fabIngest.style.display = "";
   }
 
   // ---------------------------------------------------------

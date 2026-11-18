@@ -977,6 +977,9 @@ p {
   padding: 12px;
   border-radius: 16px;
   background: var(--frame-2);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .profile-avatar {
@@ -994,8 +997,10 @@ p {
 
 .profile-meta {
   min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .profile-meta strong {
@@ -1005,11 +1010,17 @@ p {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: block;
 }
 
 .profile-meta span {
   font-size: 10.5px;
   color: var(--side-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  max-width: 100%;
 }
 
 .profile-badge {
