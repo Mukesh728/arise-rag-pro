@@ -12,6 +12,7 @@ import os
 import time
 import uuid
 import shutil
+import hmac
 from contextlib import asynccontextmanager
 from typing import List, Optional, Dict, Any
 
@@ -170,19 +171,31 @@ async def security_middleware(request: Request, call_next):
         )
         if is_protected:
             token = request.headers.get("X-Admin-Token", "")
-            if token != _ADMIN_TOKEN:
+            if not hmac.compare_digest(token, _ADMIN_TOKEN):
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "Invalid or missing admin token."},
                 )
 
-    # 2. Rate limit on query endpoint
+    # 2. Rate limit on query endpoint (proxy-aware + bounded memory)
     if _RATE_LIMIT_PER_HOUR > 0 and path.endswith("/query") and request.method == "POST":
-        client_ip = request.client.host if request.client else "127.0.0.1"
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            client_ip = forwarded_for.split(",")[0].strip()
+        else:
+            client_ip = request.client.host if request.client else "127.0.0.1"
+
         now = time.time()
         cutoff = now - 3600
-        _rate_counter[client_ip] = [t for t in _rate_counter[client_ip] if t > cutoff]
-        if len(_rate_counter[client_ip]) >= _RATE_LIMIT_PER_HOUR:
+
+        # Drop stale/empty IP entries from the in-memory counter so it cannot grow without bound
+        for ip in list(_rate_counter.keys()):
+            _rate_counter[ip] = [t for t in _rate_counter[ip] if t > cutoff]
+            if not _rate_counter[ip]:
+                _rate_counter.pop(ip, None)
+
+        user_timestamps = _rate_counter.get(client_ip, [])
+        if len(user_timestamps) >= _RATE_LIMIT_PER_HOUR:
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Rate limit exceeded. Try again later."},

@@ -34,4 +34,4 @@ RUN mkdir -p uploads
 EXPOSE 8000
 
 # Single worker: BM25 index lives in process memory, multiple workers would desync
-CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
+CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --proxy-headers --forwarded-allow-ips='*'"]

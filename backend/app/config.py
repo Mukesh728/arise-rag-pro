@@ -41,7 +41,7 @@ class Settings(BaseModel):
     NEIGHBOR_EXPANSION: bool = os.getenv("NEIGHBOR_EXPANSION", "true").lower() in ("true", "1", "yes")
     
     # LLM Settings
-    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "auto") # auto, gemini, openai, groq, mock
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "auto") # auto, gemini, mock
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", "")
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY", "")

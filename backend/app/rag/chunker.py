@@ -73,7 +73,7 @@ class TokenChunker:
         subject: str,
         carried_unit: Optional[int] = None,
     ):
-        """
+        r"""
         Chunks the text of a single page to ~target_tokens with overlap.
         Detects headings with regex UNIT[\s\-:]*([IVX]+|\d+) (case-insensitive).
         Carries current unit forward across chunks until the next heading.

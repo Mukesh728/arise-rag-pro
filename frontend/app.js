@@ -102,6 +102,7 @@ function initMRSPTUApp() {
   const btnRemoveFile = document.getElementById("btn-remove-file");
   const inputSubject = document.getElementById("input-subject");
   const inputUnit = document.getElementById("input-unit");
+  const adminTokenInput = document.getElementById("admin-token-input");
   const btnStartIngest = document.getElementById("btn-start-ingest");
   const ingestResultCard = document.getElementById("ingest-result-card");
   const ingestSuccessMsg = document.getElementById("ingest-success-msg");
@@ -132,6 +133,32 @@ function initMRSPTUApp() {
 
   // Toast
   const toastNotification = document.getElementById("toast-notification");
+
+  // Admin Token Storage (sessionStorage only)
+  const ADMIN_TOKEN_KEY = "arise-admin-token";
+  function getAdminToken() {
+    try {
+      return sessionStorage.getItem(ADMIN_TOKEN_KEY) || "";
+    } catch (e) {
+      return "";
+    }
+  }
+  function setAdminToken(val) {
+    try {
+      if (val) {
+        sessionStorage.setItem(ADMIN_TOKEN_KEY, val);
+      } else {
+        sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+      }
+    } catch (e) {}
+  }
+
+  if (adminTokenInput) {
+    adminTokenInput.value = getAdminToken();
+    adminTokenInput.addEventListener("input", (e) => {
+      setAdminToken(e.target.value.trim());
+    });
+  }
 
   // History Elements
   const historyList = document.getElementById("history-list");
@@ -844,11 +871,22 @@ function initMRSPTUApp() {
       }
       if (ingestResultCard) ingestResultCard.style.display = "none";
 
+      const headers = {};
+      const adminToken = getAdminToken();
+      if (adminToken) {
+        headers["X-Admin-Token"] = adminToken;
+      }
+
       try {
         const res = await fetch("/api/ingest", {
           method: "POST",
+          headers: headers,
           body: formData,
         });
+
+        if (res.status === 403) {
+          throw new Error("Admin authorization required (403). Enter the valid Admin token above.");
+        }
 
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
@@ -892,7 +930,18 @@ function initMRSPTUApp() {
       btnGenerateSamplePdf.textContent = "Generating Sample Syllabus...";
 
       try {
-        const res = await fetch("/api/generate-sample-syllabus", { method: "POST" });
+        const headers = {};
+        const adminToken = getAdminToken();
+        if (adminToken) {
+          headers["X-Admin-Token"] = adminToken;
+        }
+        const res = await fetch("/api/generate-sample-syllabus", {
+          method: "POST",
+          headers: headers,
+        });
+        if (res.status === 403) {
+          throw new Error("Admin authorization required (403). Enter the valid Admin token in the Ingest tab.");
+        }
         if (!res.ok) {
           throw new Error("Sample syllabus creation not supported directly or failed");
         }
@@ -908,6 +957,27 @@ function initMRSPTUApp() {
       }
     });
   }
+
+  // Exposed helper to delete document using admin token if set
+  window.deleteDocument = async function (docId) {
+    const headers = {};
+    const adminToken = getAdminToken();
+    if (adminToken) {
+      headers["X-Admin-Token"] = adminToken;
+    }
+    const res = await fetch(`/api/documents/${encodeURIComponent(docId)}`, {
+      method: "DELETE",
+      headers: headers,
+    });
+    if (res.status === 403) {
+      throw new Error("Admin authorization required (403). Enter the valid Admin token in the Ingest tab.");
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Document deletion failed");
+    }
+    return await res.json();
+  };
 
   // ---------------------------------------------------------
   // Viva Evaluation Benchmark Suite

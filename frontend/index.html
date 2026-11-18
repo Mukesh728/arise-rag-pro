@@ -483,6 +483,11 @@
                     </div>
                   </div>
 
+                  <div class="input-field-group" style="margin-top: 10px;">
+                    <label for="admin-token-input" class="field-label">Admin token <span style="font-weight: normal; opacity: 0.65; font-size: 0.85em;">(optional; required if ADMIN_TOKEN is set)</span></label>
+                    <input type="password" id="admin-token-input" class="custom-input" placeholder="Enter admin token (stored in session only)" autocomplete="off" data-testid="admin-token-input">
+                  </div>
+
                   <ol class="ingest-pipeline-explainer">
                     <li class="explainer-step"><span class="step-num">1</span><span class="step-txt">PDFExtractor reads
                         pages, keeping 1-indexed page numbers</span></li>

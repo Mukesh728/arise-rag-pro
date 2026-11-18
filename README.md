@@ -57,7 +57,7 @@ flowchart TD
 
 ### 1. Clone & enter the directory
 ```powershell
-git clone <repo-url>
+git clone https://github.com/Mukesh728/arise-rag-pro.git
 cd "7th sem projext"
 ```
 
