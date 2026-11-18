@@ -59,7 +59,7 @@ class GeminiAnswerGenerator:
             or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
         )
         http_options = types.HttpOptions(
-            timeout=5000,
+            timeout=30000,
             retry_options=types.HttpRetryOptions(attempts=1),
         )
         if self.api_key:
@@ -161,9 +161,9 @@ ANSWER:"""
 
         try:
             future = _LLM_EXECUTOR.submit(_call_gemini)
-            return future.result(timeout=4.0)
+            return future.result(timeout=25.0)
         except concurrent.futures.TimeoutError:
-            print("[Gemini Timeout] LLM call exceeded 4.0 seconds. Returning grounded fallback context.")
+            print("[Gemini Timeout] LLM call exceeded 25.0 seconds. Returning grounded fallback context.")
             return LLM_UNAVAILABLE_MESSAGE
         except Exception as e:
             # When quota is exhausted (429 RESOURCE_EXHAUSTED) or network drops,
