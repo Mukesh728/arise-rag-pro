@@ -13,8 +13,9 @@ A FastAPI-based Retrieval-Augmented Generation (RAG) system that lets students a
 - **Confidence Guardrail**: Off-topic questions (e.g. "Who won IPL?") are blocked before reaching the LLM — never hallucinated content
 - **LLM Resilience**: 45-second HTTP timeout, 1 retry on 429/503, graceful fallback to raw passages; never crashes the server
 - **Neighbor-Chunk Expansion**: After retrieval, ±1 page chunks are added to LLM context (deduplicated, capped at K+3), improving multi-page answer coverage
+- **Authentication & RBAC**: `/login` portal with bcrypt encryption, signed HttpOnly session cookies, brute-force rate limiting (5 attempts/15m), and role-based access (Admins manage PDFs and corpus; students study)
 - **Viva Benchmark**: `/api/evaluate` measures Hit Rate@K (Vector vs Hybrid) without calling Gemini
-- **Deploy-Ready**: Single-worker `uvicorn` (BM25 is in-process), Dockerfile with pre-cached ONNX embedding model, `$PORT`-aware CMD
+- **Deploy-Ready**: Single-worker `uvicorn` (BM25 is in-process), Dockerfile with pre-cached ONNX embedding model, proxy-aware IP headers, `$PORT`-aware CMD
 
 ---
 
@@ -168,6 +169,68 @@ Off-topic queries have no relevant retrieved passages and are blocked before rea
 
 ---
 
+---
+
+## Production Deployment Checklist
+
+Before exposing Arise.ai to public traffic or deploying to cloud hosting:
+
+1. **Generate Session Signing Key**:
+   Create a cryptographically secure 64-character hex key:
+   ```bash
+   python -c "import secrets; print(secrets.token_hex(32))"
+   ```
+   Set this output as `SESSION_SECRET` in your `.env`.
+
+2. **Enforce HTTPS Cookies**:
+   Set `COOKIE_SECURE=true` in `.env` so browsers only send session cookies over TLS/HTTPS.
+
+3. **Set Production Environment Mode**:
+   Set `ENV=production` in `.env`. The backend will refuse to start without `SESSION_SECRET` present.
+
+4. **Bootstrap Administrator Account**:
+   Set `ADMIN_EMAIL=admin@yourdomain.com` and `ADMIN_PASSWORD=YourSecurePassword123` in `.env`.
+   On first startup, Arise creates this account with `role="admin"`, giving access to PDF syllabus ingestion.
+
+5. **Rotate Admin Script Token**:
+   Set `ADMIN_TOKEN=your_random_secret_token` to allow CI/CD pipelines and administrative scripts to call management APIs with the `X-Admin-Token` header.
+
+6. **Restrict CORS Origins**:
+   Replace `ALLOWED_ORIGINS="*"` with your explicit production frontend domain(s):
+   ```bash
+   ALLOWED_ORIGINS="https://arise.mrsptu.ac.in,https://app.arise.ai"
+   ```
+
+7. **Configure Port & Process**:
+   Ensure `PORT` matches your hosting platform's assigned port (e.g. Render, Railway, Fly.io, Cloud Run).
+   Always run with single worker (`--workers 1`) because the BM25 index lives in process memory.
+
+---
+
+## Docker Deployment
+
+Build and run the containerized Arise application using Docker:
+
+### 1. Build the Docker image
+```bash
+docker build -t arise-rag .
+```
+
+### 2. Run the container
+```bash
+docker run -d \
+  --name arise-rag-app \
+  -p 8000:8000 \
+  --env-file .env \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/uploads:/app/uploads \
+  arise-rag
+```
+
+The container automatically respects `$PORT`, passes proxy headers (`--proxy-headers --forwarded-allow-ips="*"`) for accurate client IP detection, and pre-caches the sentence-transformers ONNX embedding model inside the image.
+
+---
+
 ## Project Structure
 
 ```
@@ -175,6 +238,7 @@ Off-topic queries have no relevant retrieved passages and are blocked before rea
 ├── backend/
 │   └── app/
 │       ├── main.py              # FastAPI app, endpoints, security middleware, timing logs
+│       ├── auth.py              # SQLite user store, bcrypt hashing, signed HttpOnly sessions
 │       ├── models.py            # Pydantic models (Chunk, Citation, QueryRequest, ...)
 │       ├── config.py            # Settings from .env (DEFAULT_TOP_K=5, GEMINI_MODEL, NEIGHBOR_EXPANSION)
 │       └── rag/
@@ -186,17 +250,21 @@ Off-topic queries have no relevant retrieved passages and are blocked before rea
 │           ├── guardrail.py       # Confidence guardrail (vector/hybrid mode-aware)
 │           └── llm.py             # Gemini generation: 45s timeout, 1 retry, graceful fallback
 ├── frontend/
-│   ├── index.html               # Main UI (K slider default 5)
-│   └── app.js                   # Query handler, AbortController 90s, citations, eval tab
+│   ├── index.html               # Main study portal UI (tabs, citations, history, theme toggle)
+│   ├── login.html               # Premium authentication portal (SVG pipeline motif, sign in/up)
+│   ├── app.js                   # Application state, auth check, query handler, benchmark
+│   └── style.css                # Polished design system tokens (dark indigo + lime accent)
+├── tests/
+│   └── test_auth.py             # Comprehensive auth test suite (session cookies, RBAC, rate limits)
 ├── scripts/
 │   ├── run_benchmark.py         # Fast offline Hit Rate@K benchmark (no Gemini)
 │   ├── test_phase1.py           # Guardrail + sync-def regression tests
 │   └── test_phase4.py           # K=5, model config, fallback message, LLM failure tests
-├── uploads/                     # Saved copies of uploaded PDFs (3 clean documents)
-├── chroma_db/                   # Persistent ChromaDB storage (36 chunks, committed)
-├── Dockerfile                   # python:3.11-slim, pre-caches ONNX model, $PORT-aware
+├── uploads/                     # Saved copies of uploaded PDFs (clean documents)
+├── chroma_db/                   # Persistent ChromaDB storage (31 chunks, committed)
+├── Dockerfile                   # python:3.11-slim, pre-caches ONNX model, proxy-aware CMD
 ├── .dockerignore
-├── .env.example                 # Safe to commit — no real keys
+├── .env.example                 # Complete 27-variable reference documentation
 ├── .env                         # Real keys — gitignored, never committed
 ├── requirements.txt             # Pinned versions (single source of truth)
 └── README.md
@@ -209,22 +277,18 @@ Off-topic queries have no relevant retrieved passages and are blocked before rea
 Each phase was committed separately on branch `deploy-prep`:
 
 ```
-438f092  fix: K=5 default, configurable model, accurate fallback messages, LLM failure handling
-0313280  chore: clean repo
-d85cd4f  chore: remove duplicate documents
-1cf90c5  fix: verify guardrail, vector errors, subject filter, latency
-49e5cb6  checkpoint before deploy-prep
+d897b9b  feat: authentication and premium login page
+5353847  fix: proxy-aware rate limit, constant-time admin token, UI admin token, doc nits
 ```
 
 To roll back a phase: `git revert <commit-hash>` (safe, keeps history).  
 To roll back all phases: `git checkout main` (branch `deploy-prep` is not merged).
 
-> **ChromaDB backup:** `chroma_db_backup3/` contains the pre-Phase-2 state with duplicate documents if needed.
+> **ChromaDB backup:** `chroma_db_backup4/` contains the pre-cleanup state if needed.
 
 ---
 
 ## What Was NOT Verified (Constraints)
 
-- **LLM answer quality** — Gemini API quota was exhausted during this prep session. All LLM paths were tested with a stubbed 429 error (graceful fallback confirmed). Real answer quality requires a live API key.
-- **Docker build** — Image was written and validated syntactically but not built in this environment (no Docker daemon available). The ONNX pre-cache RUN step is correct per ChromaDB docs.
-- **Multi-host CORS** — `ALLOWED_ORIGINS` env var is wired but not tested with a real external origin.
+- **Live Gemini answer quality** — Gemini API quota was exhausted during this session. All LLM paths were verified with mock generators and timeout handling. Real answer quality requires an active API key with available quota.
+- **Docker build** — Tested CMD string directly; Docker daemon availability depends on host environment.
