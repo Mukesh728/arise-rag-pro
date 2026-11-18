@@ -1713,14 +1713,40 @@ input:-webkit-autofill:active {
   border-radius: inherit;
 }
 
+/* Select & Input Base */
+select,
 .custom-select {
   appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   cursor: pointer;
-  padding-right: 36px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23B8C4D9' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  padding: 0 40px 0 16px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2335C6E8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 12px center;
+  background-position: right 14px center;
   background-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  color: #F6EBC8;
+  color-scheme: dark;
+}
+
+select option,
+select optgroup,
+.custom-select option,
+.custom-select optgroup {
+  background-color: #14213D;
+  color: #F6EBC8;
+  padding: 10px 14px;
+}
+
+select option:checked,
+select option:hover,
+.custom-select option:checked,
+.custom-select option:hover {
+  background: #35C6E8 linear-gradient(#35C6E8, #35C6E8);
+  color: #0B1A33;
 }
 
 .custom-select:focus,
@@ -1731,16 +1757,22 @@ input:-webkit-autofill:active {
 }
 
 .custom-select.dark {
-  height: 40px;
+  height: 44px;
   min-width: 150px;
-  color: #fff;
+  color: #F6EBC8;
   border-color: rgba(255, 255, 255, 0.14);
   background-color: rgba(255, 255, 255, 0.08);
 }
 
 .custom-select.dark option {
-  color: #0E1626;
-  background: #ffffff;
+  color: #F6EBC8;
+  background-color: #14213D;
+}
+
+.select-group {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .tuning-card {
@@ -1749,9 +1781,21 @@ input:-webkit-autofill:active {
 
 .tuning-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(210px, 1.4fr) minmax(180px, 1.2fr) minmax(140px, 1fr) minmax(140px, 1fr);
   gap: 18px;
   margin-bottom: 18px;
+}
+
+@media (max-width: 1100px) {
+  .tuning-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .tuning-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .param-header {
