@@ -63,7 +63,7 @@ class Settings(BaseModel):
     
     # LLM Settings
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "auto") # auto, gemini, mock
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", "")
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY", "")
     GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY", "")

@@ -34,7 +34,7 @@ LLM_UNAVAILABLE_MESSAGE = (
     "The language model is temporarily unavailable (quota or network). "
     "Here are the most relevant passages from your notes."
 )
-MODEL_NAME = getattr(settings, "GEMINI_MODEL", "gemini-3.5-flash-lite")
+MODEL_NAME = getattr(settings, "GEMINI_MODEL", "gemini-3.8-flash")
 
 # Persistent executor pool with non-blocking timeout handling (avoids shutdown(wait=True) blocking)
 _LLM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)
@@ -56,10 +56,10 @@ class GeminiAnswerGenerator:
         self.model = (
             model
             or getattr(settings, "GEMINI_MODEL", None)
-            or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+            or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
         )
         http_options = types.HttpOptions(
-            timeout=30000,
+            timeout=65000,
             retry_options=types.HttpRetryOptions(attempts=1),
         )
         if self.api_key:
@@ -156,14 +156,14 @@ ANSWER:"""
             return self.client.models.generate_content(
                 model=self.model,
                 contents=prompt,
-                config=types.GenerateContentConfig(max_output_tokens=1500),
+                config=types.GenerateContentConfig(max_output_tokens=800),
             ).text
 
         try:
             future = _LLM_EXECUTOR.submit(_call_gemini)
-            return future.result(timeout=25.0)
+            return future.result(timeout=65.0)
         except concurrent.futures.TimeoutError:
-            print("[Gemini Timeout] LLM call exceeded 25.0 seconds. Returning grounded fallback context.")
+            print("[Gemini Timeout] LLM call exceeded 65.0 seconds. Returning grounded fallback context.")
             return LLM_UNAVAILABLE_MESSAGE
         except Exception as e:
             # When quota is exhausted (429 RESOURCE_EXHAUSTED) or network drops,
