@@ -377,13 +377,15 @@ async def serve_intro_video():
 
 @app.get(f"{settings.API_PREFIX}/health", tags=["Health"])
 async def health_check():
-    """Return health status and total indexed chunk count."""
+    """Return health status, indexed chunk count, version, and auth status."""
     total_chunks = vector_store.count()
     return {
-        "status": "online",
-        "app_name": settings.APP_NAME,
-        "version": settings.APP_VERSION,
+        "status": "ok",
+        "chunks": total_chunks,
         "total_chunks": total_chunks,
+        "version": settings.APP_VERSION,
+        "auth_enabled": settings.AUTH_ENABLED,
+        "app_name": settings.APP_NAME,
         "vector_store": settings.VECTOR_STORE_TYPE,
     }
 

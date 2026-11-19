@@ -380,6 +380,19 @@ def test_safe_production_defaults():
         if orig_global: os.environ["GLOBAL_DAILY_QUERY_LIMIT"] = orig_global
 
 
+def test_health_endpoint():
+    """GET /api/health is public, requires no auth, and returns ok status, chunks, version, auth_enabled."""
+    client = TestClient(app)
+    res = client.get("/api/health")
+    assert res.status_code == 200, f"Expected 200, got {res.status_code}"
+    data = res.json()
+    assert data["status"] == "ok"
+    assert "chunks" in data
+    assert "total_chunks" in data
+    assert "version" in data
+    assert "auth_enabled" in data
+
+
 def test_login_rate_limiting_triggers_after_5_failures():
     client = TestClient(app)
     bad_email = "victim_rate_limit@mrsptu.ac.in"
@@ -438,6 +451,7 @@ if __name__ == "__main__":
         test_query_input_limits,
         test_security_headers,
         test_safe_production_defaults,
+        test_health_endpoint,
         test_login_rate_limiting_triggers_after_5_failures,
         test_auth_disabled_allows_anonymous_access,
     ]
