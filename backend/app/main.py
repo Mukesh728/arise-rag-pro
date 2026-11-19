@@ -61,7 +61,8 @@ def expand_neighbor_chunks(
     """
     For each selected chunk, adds chunks of the same doc_id and unit with
     page_number +- 1 to the context sent to the LLM.
-    Dedupes and caps total at cap (e.g. K + 3).
+    Prioritizes page + 1 (continuation of topics spanning pages) before page - 1.
+    Dedupes and caps total at cap.
     """
     seen_ids = set()
     expanded: List[Chunk] = []
@@ -71,6 +72,7 @@ def expand_neighbor_chunks(
         seen_ids.add(c.chunk_id)
         expanded.append(c)
 
+    # Pass 1: Forward continuation (page + 1) to capture multi-page topics
     for c in selected_chunks:
         doc_id = c.metadata.doc_id
         unit = c.metadata.unit
@@ -85,7 +87,29 @@ def expand_neighbor_chunks(
             if (
                 cand_meta.doc_id == doc_id
                 and cand_meta.unit == unit
-                and cand_meta.page_number in (page - 1, page + 1)
+                and cand_meta.page_number == page + 1
+            ):
+                seen_ids.add(cand.chunk_id)
+                expanded.append(cand)
+                if len(expanded) >= cap:
+                    return expanded
+
+    # Pass 2: Backward context (page - 1)
+    for c in selected_chunks:
+        doc_id = c.metadata.doc_id
+        unit = c.metadata.unit
+        page = c.metadata.page_number
+        if not doc_id or page is None:
+            continue
+
+        for cand in all_chunks:
+            if cand.chunk_id in seen_ids:
+                continue
+            cand_meta = cand.metadata
+            if (
+                cand_meta.doc_id == doc_id
+                and cand_meta.unit == unit
+                and cand_meta.page_number == page - 1
             ):
                 seen_ids.add(cand.chunk_id)
                 expanded.append(cand)
@@ -640,7 +664,7 @@ def query_rag(request: QueryRequest):
                 context_chunks = expand_neighbor_chunks(
                     selected_chunks=retrieved_chunks,
                     all_chunks=all_chunks,
-                    cap=top_k + 3,
+                    cap=max(top_k + 6, 12),
                 )
             except Exception as exp_err:
                 print(f"[NeighborExpansion Warning] Expansion failed ({exp_err}), using retrieved chunks.")
