@@ -49,11 +49,17 @@ from backend.app.main import app
 import backend.app.auth as auth_module
 
 
+import bcrypt
+
 def init_test_env():
     # Initialize test DB
     auth_module.init_db()
+    # Fast hashing in test environment
+    auth_module.hash_password = lambda pw: bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt(rounds=4)).decode("utf-8")
     # Mock LLM generator to prevent external Gemini API calls
     main_module.llm_generator.generate_answer = MagicMock(return_value="Mocked answer for testing")
+    # Mock search service to prevent Chroma/BM25 disk scans during auth tests
+    main_module.hybrid_service.search = MagicMock(return_value=[])
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -178,6 +184,202 @@ def test_logout_clears_cookie():
     assert me_res.status_code == 401
 
 
+def test_real_logout_invalidates_old_session():
+    client = TestClient(app)
+    # Register / login user
+    email = "token_revocation@mrsptu.ac.in"
+    reg = client.post("/api/auth/register", json={"email": email, "password": "Password123!"})
+    cookie_token = reg.cookies.get("arise_session")
+    assert cookie_token, "No session cookie received"
+
+    # Verify session works
+    me1 = client.get("/api/auth/me", cookies={"arise_session": cookie_token})
+    assert me1.status_code == 200
+
+    # Logout to increment token_version
+    logout_res = client.post("/api/auth/logout", cookies={"arise_session": cookie_token})
+    assert logout_res.status_code == 200
+
+    # Old cookie token MUST now be rejected (401)
+    me2 = client.get("/api/auth/me", cookies={"arise_session": cookie_token})
+    assert me2.status_code == 401, f"Expected 401 after token_version revocation, got {me2.status_code}"
+
+
+def test_ip_spoofing_defense_count_0():
+    """When TRUSTED_PROXY_COUNT=0, X-Forwarded-For is ignored and client host is used."""
+    os.environ["TRUSTED_PROXY_COUNT"] = "0"
+    client = TestClient(app)
+    bad_email = "spoof_victim_0@mrsptu.ac.in"
+    auth_module._login_failures.clear()
+
+    # Attempt 5 logins with changing fake X-Forwarded-For headers
+    for i in range(5):
+        res = client.post(
+            "/api/auth/login",
+            json={"email": bad_email, "password": "WrongPassword!"},
+            headers={"X-Forwarded-For": f"10.0.0.{i+1}"}
+        )
+        assert res.status_code == 401
+
+    # 6th attempt with another fake IP must be BLOCKED (429) because both share client.host
+    blocked = client.post(
+        "/api/auth/login",
+        json={"email": bad_email, "password": "WrongPassword!"},
+        headers={"X-Forwarded-For": "10.0.0.99"}
+    )
+    assert blocked.status_code == 429, f"Spoofed IP bypassed rate limit! Status: {blocked.status_code}"
+    auth_module._login_failures.clear()
+
+
+def test_ip_spoofing_defense_count_1():
+    """When TRUSTED_PROXY_COUNT=1, rightmost IP is trusted, prepended spoofed IPs are ignored."""
+    os.environ["TRUSTED_PROXY_COUNT"] = "1"
+    client = TestClient(app)
+    bad_email = "spoof_victim_1@mrsptu.ac.in"
+    auth_module._login_failures.clear()
+
+    trusted_proxy_ip = "198.51.100.25"
+
+    for i in range(5):
+        res = client.post(
+            "/api/auth/login",
+            json={"email": bad_email, "password": "WrongPassword!"},
+            headers={"X-Forwarded-For": f"1.2.3.{i+1}, {trusted_proxy_ip}"}
+        )
+        assert res.status_code == 401
+
+    # 6th attempt with new prepended fake client IP must still be BLOCKED (429)
+    blocked = client.post(
+        "/api/auth/login",
+        json={"email": bad_email, "password": "WrongPassword!"},
+        headers={"X-Forwarded-For": f"9.9.9.9, 8.8.8.8, {trusted_proxy_ip}"}
+    )
+    assert blocked.status_code == 429, f"Spoofed IP bypassed count=1 rate limit! Status: {blocked.status_code}"
+    auth_module._login_failures.clear()
+    os.environ["TRUSTED_PROXY_COUNT"] = "0"
+
+
+def test_global_daily_query_limit():
+    """When GLOBAL_DAILY_QUERY_LIMIT is reached, /api/query returns 429 with demo quota message."""
+    client = TestClient(app)
+    # Login as student
+    client.post("/api/auth/login", json={
+        "email": "student_test1@mrsptu.ac.in",
+        "password": "Password123!"
+    })
+
+    os.environ["GLOBAL_DAILY_QUERY_LIMIT"] = "2"
+    main_module.settings.GLOBAL_DAILY_QUERY_LIMIT = 2
+
+    # Reset SQLite daily usage table for clean test
+    conn = auth_module.get_db_conn()
+    with conn:
+        conn.execute("DELETE FROM daily_global_usage")
+    conn.close()
+
+    res1 = client.post("/api/query", json={"question": "Test query 1", "mode": "hybrid"})
+    assert res1.status_code == 200, f"Query 1 failed: {res1.text}"
+
+    res2 = client.post("/api/query", json={"question": "Test query 2", "mode": "hybrid"})
+    assert res2.status_code == 200, f"Query 2 failed: {res2.text}"
+
+    # 3rd query exceeds limit of 2
+    res3 = client.post("/api/query", json={"question": "Test query 3", "mode": "hybrid"})
+    assert res3.status_code == 429
+    assert res3.json()["detail"] == "Daily demo quota reached, try tomorrow"
+
+    # Reset
+    os.environ.pop("GLOBAL_DAILY_QUERY_LIMIT", None)
+    main_module.settings.GLOBAL_DAILY_QUERY_LIMIT = 0
+
+
+def test_signup_rate_limiting():
+    """10 signups per hour per IP allowed, 11th gets 429."""
+    client = TestClient(app)
+    auth_module._signup_history.clear()
+
+    for i in range(10):
+        res = client.post(
+            "/api/auth/register",
+            json={"email": f"signup_user_{i}@mrsptu.ac.in", "password": "Password123!"}
+        )
+        assert res.status_code == 200, f"Signup {i+1} failed: {res.text}"
+
+    # 11th signup from same IP
+    blocked = client.post(
+        "/api/auth/register",
+        json={"email": "signup_user_11@mrsptu.ac.in", "password": "Password123!"}
+    )
+    assert blocked.status_code == 429
+    assert "Too many registrations" in blocked.json()["detail"]
+    auth_module._signup_history.clear()
+
+
+def test_query_input_limits():
+    """Query > 1000 characters returns 400 or 422, top_k is clamped to 1..8."""
+    client = TestClient(app)
+    client.post("/api/auth/login", json={
+        "email": "student_test1@mrsptu.ac.in",
+        "password": "Password123!"
+    })
+
+    # Query > 1000 chars
+    long_q = "A" * 1005
+    res_long = client.post("/api/query", json={"question": long_q, "mode": "hybrid"})
+    assert res_long.status_code in (400, 422), f"Expected 400/422 for long query, got {res_long.status_code}"
+
+    # Query with top_k > 8 clamped to 8
+    res_k = client.post("/api/query", json={"question": "Short valid query", "top_k": 50})
+    assert res_k.status_code == 200
+
+
+def test_security_headers():
+    """Security headers are attached to responses and auth routes have no-store."""
+    client = TestClient(app)
+    res_auth = client.get("/api/auth/config")
+    assert res_auth.headers.get("X-Content-Type-Options") == "nosniff"
+    assert res_auth.headers.get("X-Frame-Options") == "DENY"
+    assert res_auth.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+    assert "no-store" in res_auth.headers.get("Cache-Control", "")
+
+    res_root = client.get("/")
+    assert res_root.headers.get("X-Content-Type-Options") == "nosniff"
+    assert res_root.headers.get("X-Frame-Options") == "DENY"
+    assert res_root.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+
+
+def test_safe_production_defaults():
+    """When ENV=production and variables unset, safe defaults are enforced."""
+    import backend.app.config as cfg
+    orig_env = os.environ.get("ENV")
+    orig_daily = os.environ.get("DAILY_QUERY_LIMIT")
+    orig_hourly = os.environ.get("RATE_LIMIT_PER_HOUR")
+    orig_docs = os.environ.get("ENABLE_DOCS")
+    orig_cookie = os.environ.get("COOKIE_SECURE")
+    orig_global = os.environ.get("GLOBAL_DAILY_QUERY_LIMIT")
+    try:
+        os.environ["ENV"] = "production"
+        os.environ.pop("DAILY_QUERY_LIMIT", None)
+        os.environ.pop("RATE_LIMIT_PER_HOUR", None)
+        os.environ.pop("ENABLE_DOCS", None)
+        os.environ.pop("COOKIE_SECURE", None)
+        os.environ.pop("GLOBAL_DAILY_QUERY_LIMIT", None)
+        prod_settings = cfg.Settings()
+        assert prod_settings.DAILY_QUERY_LIMIT == 20
+        assert prod_settings.RATE_LIMIT_PER_HOUR == 60
+        assert prod_settings.ENABLE_DOCS is False
+        assert prod_settings.COOKIE_SECURE is True
+        assert prod_settings.GLOBAL_DAILY_QUERY_LIMIT == 300
+    finally:
+        if orig_env: os.environ["ENV"] = orig_env
+        else: os.environ.pop("ENV", None)
+        if orig_daily: os.environ["DAILY_QUERY_LIMIT"] = orig_daily
+        if orig_hourly: os.environ["RATE_LIMIT_PER_HOUR"] = orig_hourly
+        if orig_docs: os.environ["ENABLE_DOCS"] = orig_docs
+        if orig_cookie: os.environ["COOKIE_SECURE"] = orig_cookie
+        if orig_global: os.environ["GLOBAL_DAILY_QUERY_LIMIT"] = orig_global
+
+
 def test_login_rate_limiting_triggers_after_5_failures():
     client = TestClient(app)
     bad_email = "victim_rate_limit@mrsptu.ac.in"
@@ -228,6 +430,14 @@ if __name__ == "__main__":
         test_non_admin_ingest_returns_403,
         test_admin_ingest_succeeds_auth_check,
         test_logout_clears_cookie,
+        test_real_logout_invalidates_old_session,
+        test_ip_spoofing_defense_count_0,
+        test_ip_spoofing_defense_count_1,
+        test_global_daily_query_limit,
+        test_signup_rate_limiting,
+        test_query_input_limits,
+        test_security_headers,
+        test_safe_production_defaults,
         test_login_rate_limiting_triggers_after_5_failures,
         test_auth_disabled_allows_anonymous_access,
     ]

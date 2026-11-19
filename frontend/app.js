@@ -72,13 +72,22 @@ function initMRSPTUApp() {
     if (profileAvatar) profileAvatar.textContent = initials;
     if (railAvatar) railAvatar.textContent = initials;
 
-    // Ensure PDF Ingest tab and action buttons remain accessible
+    // Admin-only PDF Ingest tab and action buttons (hidden for role === "user")
+    const isAdmin = user.role === "admin";
     const tabBtnIngest = document.getElementById("tab-btn-ingest");
     const railIngest = document.querySelector('[data-go="ingest"]');
     const fabIngest = document.querySelector('.fab[data-go="ingest"]');
-    if (tabBtnIngest) tabBtnIngest.style.display = "";
-    if (railIngest) railIngest.style.display = "";
-    if (fabIngest) fabIngest.style.display = "";
+    if (tabBtnIngest) tabBtnIngest.style.display = isAdmin ? "" : "none";
+    if (railIngest) railIngest.style.display = isAdmin ? "" : "none";
+    if (fabIngest) fabIngest.style.display = isAdmin ? "" : "none";
+
+    if (!isAdmin) {
+      const activeTab = document.querySelector(".tab-button.active");
+      if (activeTab && activeTab.getAttribute("data-tab") === "tab-ingest") {
+        const assistantBtn = document.getElementById("tab-btn-assistant");
+        if (assistantBtn) assistantBtn.click();
+      }
+    }
   }
 
   // ---------------------------------------------------------

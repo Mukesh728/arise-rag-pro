@@ -16,7 +16,7 @@ import hmac
 from contextlib import asynccontextmanager
 from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status, Query, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,7 +27,9 @@ from backend.app.auth import (
     init_db,
     bootstrap_admin,
     get_current_user,
+    get_client_ip,
     check_and_increment_daily_query,
+    check_and_increment_global_daily_query,
 )
 from backend.app.models import (
     Chunk,
@@ -123,6 +125,17 @@ async def lifespan(app: FastAPI):
         if not os.getenv("SESSION_SECRET"):
             raise RuntimeError("SESSION_SECRET must be set when ENV=production and AUTH_ENABLED=true")
 
+    print(
+        f"[Security] Effective settings: ENV={settings.ENV}, "
+        f"AUTH_ENABLED={settings.AUTH_ENABLED}, "
+        f"COOKIE_SECURE={settings.COOKIE_SECURE}, "
+        f"ENABLE_DOCS={settings.ENABLE_DOCS}, "
+        f"DAILY_QUERY_LIMIT={settings.DAILY_QUERY_LIMIT}, "
+        f"GLOBAL_DAILY_QUERY_LIMIT={settings.GLOBAL_DAILY_QUERY_LIMIT}, "
+        f"RATE_LIMIT_PER_HOUR={settings.RATE_LIMIT_PER_HOUR}, "
+        f"TRUSTED_PROXY_COUNT={settings.TRUSTED_PROXY_COUNT}"
+    )
+
     try:
         existing_chunks = vector_store.get_all_chunks()
         bm25_index.build_index(existing_chunks)
@@ -180,6 +193,16 @@ from collections import defaultdict
 _rate_counter: Dict[str, list] = defaultdict(list)
 
 
+def add_security_headers(res: Response, path: str) -> Response:
+    res.headers["X-Content-Type-Options"] = "nosniff"
+    res.headers["X-Frame-Options"] = "DENY"
+    res.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if path.startswith("/api/auth/"):
+        res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        res.headers["Pragma"] = "no-cache"
+    return res
+
+
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     path = request.url.path
@@ -192,9 +215,12 @@ async def security_middleware(request: Request, call_next):
             if auth_enabled:
                 current_user = get_current_user(request)
                 if not current_user:
-                    return JSONResponse(
-                        status_code=401,
-                        content={"detail": "Not authenticated"},
+                    return add_security_headers(
+                        JSONResponse(
+                            status_code=401,
+                            content={"detail": "Not authenticated"},
+                        ),
+                        path,
                     )
 
                 is_admin_endpoint = (
@@ -207,19 +233,25 @@ async def security_middleware(request: Request, call_next):
                     token = request.headers.get("X-Admin-Token", "")
                     has_valid_token = bool(_ADMIN_TOKEN and hmac.compare_digest(token, _ADMIN_TOKEN))
                     if not (is_admin_user or has_valid_token):
-                        return JSONResponse(
-                            status_code=403,
-                            content={"detail": "Admin privileges required."},
+                        return add_security_headers(
+                            JSONResponse(
+                                status_code=403,
+                                content={"detail": "Admin privileges required."},
+                            ),
+                            path,
                         )
 
                 if path.endswith("/query") and request.method == "POST":
                     if not check_and_increment_daily_query(current_user["id"]):
-                        return JSONResponse(
-                            status_code=429,
-                            content={"detail": "Daily query limit reached"},
+                        return add_security_headers(
+                            JSONResponse(
+                                status_code=429,
+                                content={"detail": "Daily query limit reached"},
+                            ),
+                            path,
                         )
             else:
-                # Phase A fallback if AUTH_ENABLED is disabled
+                # Fallback if AUTH_ENABLED is disabled
                 if _ADMIN_TOKEN:
                     is_protected = (
                         (request.method == "POST" and path.endswith("/ingest"))
@@ -229,19 +261,29 @@ async def security_middleware(request: Request, call_next):
                     if is_protected:
                         token = request.headers.get("X-Admin-Token", "")
                         if not hmac.compare_digest(token, _ADMIN_TOKEN):
-                            return JSONResponse(
-                                status_code=403,
-                                content={"detail": "Invalid or missing admin token."},
+                            return add_security_headers(
+                                JSONResponse(
+                                    status_code=403,
+                                    content={"detail": "Invalid or missing admin token."},
+                                ),
+                                path,
                             )
 
-    # 2. Hourly Rate limit on query endpoint (proxy-aware + bounded memory)
-    if _RATE_LIMIT_PER_HOUR > 0 and path.endswith("/query") and request.method == "POST":
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            client_ip = forwarded_for.split(",")[0].strip()
-        else:
-            client_ip = request.client.host if request.client else "127.0.0.1"
+    # 2. Global daily query limit check (across all users)
+    if path.endswith("/query") and request.method == "POST":
+        if not check_and_increment_global_daily_query():
+            return add_security_headers(
+                JSONResponse(
+                    status_code=429,
+                    content={"detail": "Daily demo quota reached, try tomorrow"},
+                ),
+                path,
+            )
 
+    # 3. Hourly Rate limit on query endpoint (proxy-aware + bounded memory)
+    rate_limit_per_hour = settings.RATE_LIMIT_PER_HOUR
+    if rate_limit_per_hour > 0 and path.endswith("/query") and request.method == "POST":
+        client_ip = get_client_ip(request)
         now = time.time()
         cutoff = now - 3600
 
@@ -252,28 +294,35 @@ async def security_middleware(request: Request, call_next):
                 _rate_counter.pop(ip, None)
 
         user_timestamps = _rate_counter.get(client_ip, [])
-        if len(user_timestamps) >= _RATE_LIMIT_PER_HOUR:
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "Rate limit exceeded. Try again later."},
+        if len(user_timestamps) >= rate_limit_per_hour:
+            return add_security_headers(
+                JSONResponse(
+                    status_code=429,
+                    content={"detail": "Rate limit exceeded. Try again later."},
+                ),
+                path,
             )
         _rate_counter[client_ip].append(now)
 
-    # 3. Max upload size check
+    # 4. Max upload size check
     if path.endswith("/ingest") and request.method == "POST":
         content_length = request.headers.get("content-length")
         max_bytes = _MAX_UPLOAD_MB * 1024 * 1024
         if content_length:
             try:
                 if int(content_length) > max_bytes:
-                    return JSONResponse(
-                        status_code=413,
-                        content={"detail": f"File exceeds maximum allowed size of {_MAX_UPLOAD_MB}MB."},
+                    return add_security_headers(
+                        JSONResponse(
+                            status_code=413,
+                            content={"detail": f"File exceeds maximum allowed size of {_MAX_UPLOAD_MB}MB."},
+                        ),
+                        path,
                     )
             except ValueError:
                 pass
 
-    return await call_next(request)
+    response = await call_next(request)
+    return add_security_headers(response, path)
 
 
 # ---------------------------------------------------------
@@ -488,13 +537,17 @@ def query_rag(request: QueryRequest):
     Processes student query using Vector Search or Hybrid Search (Vector + BM25 + RRF).
     Extracts citations and generates a grounded Gemini answer with strict page references.
     """
-    print(f"[API DEBUG] Request body: {request.dict() if hasattr(request, 'dict') else request.model_dump()}")
     start_time = time.time()
     query_text = request.query.strip()
     if not query_text:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Query string cannot be empty.",
+        )
+    if len(query_text) > 1000:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Query text cannot exceed 1000 characters.",
         )
 
     search_mode = request.mode.strip().lower() if request.mode else "hybrid"
@@ -503,7 +556,8 @@ def query_rag(request: QueryRequest):
         if request.threshold is not None
         else settings.SIMILARITY_THRESHOLD
     )
-    top_k = request.top_k if request.top_k > 0 else settings.DEFAULT_TOP_K
+    raw_top_k = request.top_k if request.top_k > 0 else settings.DEFAULT_TOP_K
+    top_k = max(1, min(8, int(raw_top_k)))
 
     # Step 1: Retrieve chunks using selected search mode
     t_retrieval_start = time.time()

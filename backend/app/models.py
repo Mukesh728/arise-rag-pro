@@ -53,6 +53,8 @@ class QueryRequest(BaseModel):
         if isinstance(data, dict):
             # Reconcile query vs question
             q = data.get("query") or data.get("question") or ""
+            if len(str(q)) > 1000:
+                raise ValueError("Query text cannot exceed 1000 characters.")
             data["query"] = q
             data["question"] = q
 
@@ -72,17 +74,21 @@ class QueryRequest(BaseModel):
             data["unit"] = u
             data["unit_filter"] = u
 
-            # Top_k conversion
+            # Top_k conversion & clamping (1..8)
             if "top_k" in data and data["top_k"] is not None:
                 try:
-                    data["top_k"] = int(data["top_k"])
+                    k_val = int(data["top_k"])
+                    data["top_k"] = max(1, min(8, k_val))
                 except Exception:
                     data["top_k"] = 5
             elif "top_chunks" in data and data["top_chunks"] is not None:
                 try:
-                    data["top_k"] = int(data["top_chunks"])
+                    k_val = int(data["top_chunks"])
+                    data["top_k"] = max(1, min(8, k_val))
                 except Exception:
                     data["top_k"] = 5
+            else:
+                data["top_k"] = max(1, min(8, int(data.get("top_k", 5))))
 
             # Threshold conversion
             if "threshold" in data and data["threshold"] is not None:

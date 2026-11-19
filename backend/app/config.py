@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 # Load the .env file using an absolute path so it works no matter where uvicorn is started from
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -18,11 +18,32 @@ else:
     else:
         load_dotenv(override=True)
 
+def _is_prod() -> bool:
+    return os.getenv("ENV", os.getenv("ENVIRONMENT", "development")).lower() == "production"
+
+def _env_bool(name: str, prod_default: bool, dev_default: bool) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return prod_default if _is_prod() else dev_default
+    return val.strip().lower() in ("true", "1", "yes")
+
+def _env_int(name: str, prod_default: int, dev_default: int) -> int:
+    val = os.getenv(name)
+    if val is None or val.strip() == "":
+        return prod_default if _is_prod() else dev_default
+    try:
+        return int(val.strip())
+    except ValueError:
+        return prod_default if _is_prod() else dev_default
+
 class Settings(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     APP_NAME: str = "Arise"
     APP_VERSION: str = "1.0.0"
     API_PREFIX: str = "/api"
-    ENABLE_DOCS: bool = Field(default_factory=lambda: os.getenv("ENABLE_DOCS", "true").lower() in ("true", "1", "yes"))
+    ENV: str = Field(default_factory=lambda: os.getenv("ENV", os.getenv("ENVIRONMENT", "development")).lower())
+    ENABLE_DOCS: bool = Field(default_factory=lambda: _env_bool("ENABLE_DOCS", False, True))
     
     # Vector store config ("chroma" or "pgvector")
     VECTOR_STORE_TYPE: str = os.getenv("VECTOR_STORE_TYPE", "chroma")
@@ -51,16 +72,15 @@ class Settings(BaseModel):
     AUTH_ENABLED: bool = Field(default_factory=lambda: os.getenv("AUTH_ENABLED", "true").lower() in ("true", "1", "yes"))
     USERS_DB_PATH: str = os.getenv("USERS_DB_PATH", "data/users.db")
     SESSION_SECRET: Optional[str] = os.getenv("SESSION_SECRET", None)
-    COOKIE_SECURE: bool = Field(default_factory=lambda: os.getenv("COOKIE_SECURE", "false").lower() in ("true", "1", "yes"))
+    COOKIE_SECURE: bool = Field(default_factory=lambda: _env_bool("COOKIE_SECURE", True, False))
     ALLOW_SIGNUP: bool = Field(default_factory=lambda: os.getenv("ALLOW_SIGNUP", "true").lower() in ("true", "1", "yes"))
     ADMIN_EMAIL: Optional[str] = os.getenv("ADMIN_EMAIL", None)
     ADMIN_PASSWORD: Optional[str] = os.getenv("ADMIN_PASSWORD", None)
     ADMIN_TOKEN: Optional[str] = os.getenv("ADMIN_TOKEN", "")
-    DAILY_QUERY_LIMIT: int = int(os.getenv("DAILY_QUERY_LIMIT", "0"))
-    ENV: str = os.getenv("ENV", os.getenv("ENVIRONMENT", "development")).lower()
-    
-    class Config:
-        arbitrary_types_allowed = True
+    DAILY_QUERY_LIMIT: int = Field(default_factory=lambda: _env_int("DAILY_QUERY_LIMIT", 20, 0))
+    GLOBAL_DAILY_QUERY_LIMIT: int = Field(default_factory=lambda: _env_int("GLOBAL_DAILY_QUERY_LIMIT", 300, 0))
+    RATE_LIMIT_PER_HOUR: int = Field(default_factory=lambda: _env_int("RATE_LIMIT_PER_HOUR", 60, 0))
+    TRUSTED_PROXY_COUNT: int = Field(default_factory=lambda: _env_int("TRUSTED_PROXY_COUNT", 0, 0))
 
 settings = Settings()
 
