@@ -967,15 +967,15 @@
     })();
   </script>
 
-  <!-- Intro Splash Dismissal (capped at 1200ms, skips on repeat visits or reduced motion) -->
+  <!-- Intro Splash Dismissal (Runs on first visit, skips on repeat visits or reduced motion) -->
   <script>
     (function () {
       var splash = document.getElementById("cinematic-splash");
       if (!splash) return;
       var seen = false;
       try {
-        seen = sessionStorage.getItem("arise-intro") === "1";
-        sessionStorage.setItem("arise-intro", "1");
+        var forceIntro = window.location.search.indexOf("intro=1") !== -1;
+        seen = !forceIntro && localStorage.getItem("arise_first_intro_seen") === "1";
       } catch (e) { }
       var reducedMotion = false;
       try {
@@ -985,9 +985,12 @@
       function hide() {
         if (!splash || !splash.parentNode) return;
         splash.classList.add("splash-hidden");
+        try {
+          localStorage.setItem("arise_first_intro_seen", "1");
+        } catch (e) { }
         setTimeout(function () {
           if (splash && splash.parentNode) splash.remove();
-        }, 300);
+        }, 450);
       }
 
       if (seen || reducedMotion) {
@@ -995,7 +998,7 @@
         return;
       }
       splash.addEventListener("click", hide);
-      setTimeout(hide, 1200);
+      setTimeout(hide, 2600);
     })();
   </script>
 </body>

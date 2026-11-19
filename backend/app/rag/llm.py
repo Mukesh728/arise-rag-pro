@@ -34,7 +34,7 @@ LLM_UNAVAILABLE_MESSAGE = (
     "The language model is temporarily unavailable (quota or network). "
     "Here are the most relevant passages from your notes."
 )
-MODEL_NAME = getattr(settings, "GEMINI_MODEL", "gemini-3.8-flash")
+MODEL_NAME = getattr(settings, "GEMINI_MODEL", "gemini-3-flash-preview")
 
 # Persistent executor pool with non-blocking timeout handling (avoids shutdown(wait=True) blocking)
 _LLM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)
@@ -56,7 +56,7 @@ class GeminiAnswerGenerator:
         self.model = (
             model
             or getattr(settings, "GEMINI_MODEL", None)
-            or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+            or os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
         )
         http_options = types.HttpOptions(
             timeout=65000,
@@ -153,11 +153,31 @@ ANSWER:"""
         t_gemini_start = time.time()
 
         def _call_gemini():
-            return self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=types.GenerateContentConfig(max_output_tokens=800),
-            ).text
+            preferred_order = ["gemini-3-flash-preview", "gemini-3.5-flash-lite", "gemini-3.8-flash"]
+            models_to_try = []
+            if self.model and self.model in preferred_order:
+                models_to_try.append(self.model)
+            for m in preferred_order:
+                if m not in models_to_try:
+                    models_to_try.append(m)
+            if self.model and self.model not in models_to_try:
+                models_to_try.append(self.model)
+
+            last_error = None
+            for m in models_to_try:
+                try:
+                    res = self.client.models.generate_content(
+                        model=m,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(max_output_tokens=800),
+                    )
+                    if res and res.text:
+                        return res.text
+                except Exception as err:
+                    last_error = err
+                    print(f"[Gemini Fallback] Model '{m}' failed ({type(err).__name__}). Trying next candidate...")
+                    continue
+            raise last_error
 
         try:
             future = _LLM_EXECUTOR.submit(_call_gemini)
@@ -168,7 +188,7 @@ ANSWER:"""
         except Exception as e:
             # When quota is exhausted (429 RESOURCE_EXHAUSTED) or network drops,
             # fail fast and return graceful fallback so the student immediately sees their citations!
-            print(f"[Gemini Error] API call failed: {e}")
+            print(f"[Gemini Error] All candidate models failed: {e}")
             return LLM_UNAVAILABLE_MESSAGE
         finally:
             gemini_duration_ms = round((time.time() - t_gemini_start) * 1000, 2)
