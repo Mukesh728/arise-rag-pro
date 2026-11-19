@@ -96,29 +96,36 @@ The app is now live at **http://localhost:8000**
 
 ---
 
-## Docker Deployment
+## Docker & Production Deployment
+
+For complete deployment checklists, volume mounts, and rollback instructions, see [DEPLOY.md](DEPLOY.md).
 
 ```bash
-# Build (pre-caches the ONNX embedding model in the image)
+# Build production container (non-root appuser, pre-caches ONNX embeddings)
 docker build -t arise-rag .
 
-# Run (PORT defaults to 8000)
-docker run -p 8000:8000 -e GEMINI_API_KEY=your_key arise-rag
-
-# Custom port
-docker run -p 3000:3000 -e PORT=3000 -e GEMINI_API_KEY=your_key arise-rag
+# Run with persistent SQLite data volume, production security profile, and session secret
+docker run -p 8000:8000 \
+  -v arise_data:/data \
+  -e ENV=production \
+  -e SESSION_SECRET="your_generated_32_byte_hex_secret" \
+  -e GEMINI_API_KEY="your_gemini_api_key" \
+  -e TRUSTED_PROXY_COUNT=1 \
+  arise-rag
 ```
 
-> The `chroma_db/` directory is bundled in the image with the 3 cleaned documents (36 chunks). No re-ingestion needed.
+> **Production Security**: When `ENV=production`, safe defaults are automatically active: `ENABLE_DOCS=false`, `COOKIE_SECURE=true`, `DAILY_QUERY_LIMIT=20`, `RATE_LIMIT_PER_HOUR=60`, and `GLOBAL_DAILY_QUERY_LIMIT=300`. Persistent database is located at `/data/users.db`.
 
-**Optional security env vars (all off by default):**
-
-| Variable | Effect |
-|---|---|
-| `ADMIN_TOKEN` | Requires `X-Admin-Token` header on ingest / delete endpoints |
-| `RATE_LIMIT_PER_HOUR` | Per-IP query rate limit (in-memory, resets on restart) |
-| `ALLOWED_ORIGINS` | Comma-separated CORS origins; default `*` |
-| `MAX_UPLOAD_MB` | Max PDF upload size (default 25) |
+| Environment Variable | Production Default (when unset) | Description |
+|---|---|---|
+| `ENV` | `production` | Activates production security profile |
+| `SESSION_SECRET` | *Mandatory* | Cryptographic HMAC session signing |
+| `TRUSTED_PROXY_COUNT` | `1` | Anti-spoofing index for `X-Forwarded-For` |
+| `COOKIE_SECURE` | `true` | Enforces HTTPS-only cookies |
+| `ENABLE_DOCS` | `false` | Disables `/docs` and `/openapi.json` |
+| `DAILY_QUERY_LIMIT` | `20` | Daily queries per user account |
+| `RATE_LIMIT_PER_HOUR` | `60` | Hourly queries per client IP |
+| `GLOBAL_DAILY_QUERY_LIMIT` | `300` | Shared daily demo budget across all users |
 
 ---
 
