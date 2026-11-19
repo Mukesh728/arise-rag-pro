@@ -1017,6 +1017,8 @@ async def generate_sample_syllabus():
     for p in sample_pages:
         page_num = p["page_number"]
         unit_str = p["unit"]
+        unit_text = str(unit_str).strip()
+        unit_number = int(unit_text) if unit_text.isdigit() else int(unit_text.split()[-1])
         text_content = p["text"]
         chunk_id = f"{doc_id}_p{page_num}_c0"
 
@@ -1025,7 +1027,7 @@ async def generate_sample_syllabus():
             doc_id=doc_id,
             filename=filename,
             subject=subject,
-            unit=int(p["unit"]),
+            unit=unit_number,
             page_number=page_num,
             char_start=0,
             char_end=len(text_content),
