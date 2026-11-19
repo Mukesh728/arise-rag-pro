@@ -127,7 +127,7 @@ IMPORTANT RULES:
    "{NOT_FOUND_MESSAGE}"
 4. When explaining the answer, cite the page number(s) (e.g., "[Page {chunks[0].metadata.page_number}]") so the student can verify it in their textbook/notes.
 5. Keep your tone academic, clear, and easy to understand for viva preparation.
-6. Keep your answer concise and focused (around 250 words), suitable for university viva preparation.
+6. Provide a complete, structured, and comprehensive answer covering all relevant details and points from the reference material. Do not truncate or leave points half-finished.
 
 --- REFERENCE MATERIAL ---
 {context_text}  
@@ -169,7 +169,7 @@ ANSWER:"""
                     res = self.client.models.generate_content(
                         model=m,
                         contents=prompt,
-                        config=types.GenerateContentConfig(max_output_tokens=800),
+                        config=types.GenerateContentConfig(max_output_tokens=3000, temperature=0.2),
                     )
                     if res and res.text:
                         return res.text
