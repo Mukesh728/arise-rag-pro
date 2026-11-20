@@ -73,6 +73,7 @@ class TokenChunker:
         subject: str,
         carried_unit: Optional[int] = None,
         owner_user_id: Optional[str] = None,
+        user_id: Optional[str] = None,
     ):
         r"""
         Chunks the text of a single page to ~target_tokens with overlap.
@@ -83,6 +84,7 @@ class TokenChunker:
         if not page_text.strip():
             return [], carried_unit
 
+        eff_user_id = owner_user_id or user_id
         chunks: List[Chunk] = []
         current_unit = carried_unit
 
@@ -106,7 +108,8 @@ class TokenChunker:
                     char_start=0,
                     char_end=len(page_text),
                     token_count=total_tokens,
-                    owner_user_id=owner_user_id,
+                    owner_user_id=eff_user_id,
+                    user_id=eff_user_id,
                 )
                 return [Chunk(chunk_id=chunk_id, text=page_text, metadata=meta)], current_unit
 
@@ -135,7 +138,8 @@ class TokenChunker:
                         char_start=0,
                         char_end=len(chunk_text),
                         token_count=len(chunk_token_slice),
-                        owner_user_id=owner_user_id,
+                        owner_user_id=eff_user_id,
+                        user_id=eff_user_id,
                     )
                     chunks.append(Chunk(chunk_id=chunk_id, text=chunk_text, metadata=meta))
                     chunk_idx += 1
@@ -172,7 +176,8 @@ class TokenChunker:
                         unit=current_unit,
                         page_number=page_number,
                         token_count=int(len(chunk_words) * 1.33),
-                        owner_user_id=owner_user_id,
+                        owner_user_id=eff_user_id,
+                        user_id=eff_user_id,
                     )
                     chunks.append(Chunk(chunk_id=chunk_id, text=chunk_text, metadata=meta))
                     chunk_idx += 1
@@ -191,6 +196,7 @@ class TokenChunker:
         subject: str,
         unit: Optional[int] = None,
         owner_user_id: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> List[Chunk]:
         """
         Process all pages. Carries current unit forward across chunks and pages.
@@ -199,6 +205,7 @@ class TokenChunker:
         """
         all_chunks: List[Chunk] = []
         current_unit: Optional[int] = None
+        eff_user_id = owner_user_id or user_id
 
         for page_info in pages_data:
             page_text = page_info["text"]
@@ -209,7 +216,8 @@ class TokenChunker:
                 filename=filename,
                 subject=subject,
                 carried_unit=current_unit,
-                owner_user_id=owner_user_id,
+                owner_user_id=eff_user_id,
+                user_id=eff_user_id,
             )
             all_chunks.extend(page_chunks)
 

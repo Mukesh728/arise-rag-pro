@@ -72,14 +72,16 @@ function initMRSPTUApp() {
     if (profileAvatar) profileAvatar.textContent = initials;
     if (railAvatar) railAvatar.textContent = initials;
 
-    // PDF ingest is available to every authenticated user. Uploaded documents
-    // are scoped to the current user by the backend owner_user_id filter.
+    // PDF Ingest tab and action buttons are accessible to all logged-in accounts
     const tabBtnIngest = document.getElementById("tab-btn-ingest");
     const railIngest = document.querySelector('[data-go="ingest"]');
     const fabIngest = document.querySelector('.fab[data-go="ingest"]');
     if (tabBtnIngest) tabBtnIngest.style.display = "";
     if (railIngest) railIngest.style.display = "";
     if (fabIngest) fabIngest.style.display = "";
+
+    // Fetch account-scoped uploaded documents
+    fetchUserDocuments();
   }
 
   // ---------------------------------------------------------
@@ -110,8 +112,9 @@ function initMRSPTUApp() {
           targetContent.classList.add("active");
         }
 
-        if (targetTab === "documents") {
+        if (targetTab === "documents" || targetTab === "ingest") {
           refreshCorpusData();
+          fetchUserDocuments();
         }
       });
     });
@@ -975,9 +978,10 @@ function initMRSPTUApp() {
         if (ingestDocidStat) ingestDocidStat.textContent = `Doc ID: ${data.doc_id}`;
         if (ingestResultCard) ingestResultCard.style.display = "flex";
 
-        // Refresh filters and health count
+        // Refresh filters, health count and account documents
         fetchHealth();
         fetchFilters();
+        fetchUserDocuments();
 
         // Reset file input
         if (pdfFileInput) pdfFileInput.value = "";
@@ -1050,6 +1054,136 @@ function initMRSPTUApp() {
     }
     return await res.json();
   };
+
+  // ---------------------------------------------------------
+  // User Uploaded Documents Tracking & Rendering
+  // ---------------------------------------------------------
+  async function fetchUserDocuments() {
+    const ingestContainer = document.getElementById("user-docs-container");
+    const corpusContainer = document.getElementById("corpus-user-docs-container");
+    if (!ingestContainer && !corpusContainer) return;
+
+    try {
+      const res = await fetch("/api/user/documents");
+      if (res.status === 401) {
+        const msg = `<div style="padding: 18px; text-align: center; color: var(--muted); font-size: 13px;">Please log in to see documents uploaded to your account.</div>`;
+        if (ingestContainer) ingestContainer.innerHTML = msg;
+        if (corpusContainer) corpusContainer.innerHTML = msg;
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
+      }
+      const data = await res.json();
+      const docs = data.documents || [];
+      if (ingestContainer) renderUserDocsList(docs, ingestContainer);
+      if (corpusContainer) renderUserDocsList(docs, corpusContainer);
+    } catch (err) {
+      console.warn("Failed to fetch user documents:", err);
+      const errMsg = `<div style="padding: 18px; text-align: center; color: var(--muted); font-size: 13px;">Unable to load account documents.</div>`;
+      if (ingestContainer) ingestContainer.innerHTML = errMsg;
+      if (corpusContainer) corpusContainer.innerHTML = errMsg;
+    }
+  }
+
+  function renderUserDocsList(docs, targetEl) {
+    if (!targetEl) return;
+    if (!docs || docs.length === 0) {
+      targetEl.innerHTML = `
+        <div style="padding: 24px; text-align: center; background: var(--canvas-subtle, rgba(0,0,0,0.02)); border: 1px dashed var(--line); border-radius: var(--radius-md); color: var(--ink-2); font-size: 13px;">
+          <p style="margin: 0 0 6px; font-weight: 600; color: var(--ink);">No documents uploaded yet under this account.</p>
+          <span style="font-size: 12px; color: var(--muted);">Upload your course syllabus or lecture notes above to start asking questions!</span>
+        </div>
+      `;
+      return;
+    }
+
+    const html = docs.map(doc => {
+      const uploadDate = doc.uploaded_at ? new Date(doc.uploaded_at * 1000).toLocaleDateString(undefined, {
+        month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit"
+      }) : "Recently";
+
+      return `
+        <div class="user-doc-item" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; margin-bottom: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-sm, none);">
+          <div style="display: flex; align-items: flex-start; gap: 12px; min-width: 0;">
+            <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(220, 38, 38, 0.1); color: #dc2626; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2;">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6" />
+              </svg>
+            </div>
+            <div style="min-width: 0;">
+              <div style="font-weight: 600; font-size: 13.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(doc.filename)}">
+                ${escapeHtml(doc.filename)}
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: 11.5px;">
+                <span style="background: rgba(59, 130, 246, 0.1); color: #2563eb; padding: 2px 8px; border-radius: 4px; font-weight: 500;">
+                  📚 ${escapeHtml(doc.subject)}
+                </span>
+                <span style="background: rgba(16, 185, 129, 0.1); color: #059669; padding: 2px 8px; border-radius: 4px; font-weight: 500;">
+                  📖 Unit ${escapeHtml(doc.unit)}
+                </span>
+                <span style="color: var(--muted); padding: 2px 4px;">
+                  📄 ${doc.total_pages || 0} pages · 🧩 ${doc.total_chunks || 0} chunks
+                </span>
+                <span style="color: var(--muted); padding: 2px 4px;">
+                  🕒 ${uploadDate}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div style="flex-shrink: 0; margin-left: 12px;">
+            <button type="button" class="btn-soft delete-doc-btn" onclick="deleteUserDocumentHandler('${escapeHtml(doc.id)}', '${escapeHtml(doc.filename)}')" style="color: var(--red); border-color: rgba(220, 38, 38, 0.2); font-size: 12px; padding: 6px 10px; cursor: pointer;">
+              🗑 Remove
+            </button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    targetEl.innerHTML = html;
+  }
+
+  window.deleteUserDocumentHandler = async function(docId, filename) {
+    if (!confirm(`Are you sure you want to remove "${filename}" from your account and the knowledge base?`)) {
+      return;
+    }
+    try {
+      const headers = {};
+      const adminToken = getAdminToken();
+      if (adminToken) {
+        headers["X-Admin-Token"] = adminToken;
+      }
+      const res = await fetch(`/api/documents/${encodeURIComponent(docId)}`, {
+        method: "DELETE",
+        headers: headers
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Deletion failed");
+      }
+      showToast(`Removed "${filename}" successfully`, "success");
+      fetchUserDocuments();
+      fetchHealth();
+      fetchFilters();
+    } catch (err) {
+      showToast(`Error deleting document: ${err.message}`, "error");
+    }
+  };
+
+  const btnRefreshUserDocs = document.getElementById("btn-refresh-user-docs");
+  if (btnRefreshUserDocs) {
+    btnRefreshUserDocs.addEventListener("click", () => {
+      fetchUserDocuments();
+    });
+  }
+
+  const btnRefreshCorpusUserDocs = document.getElementById("btn-refresh-corpus-user-docs");
+  if (btnRefreshCorpusUserDocs) {
+    btnRefreshCorpusUserDocs.addEventListener("click", () => {
+      fetchUserDocuments();
+    });
+  }
 
   // ---------------------------------------------------------
   // Viva Evaluation Benchmark Suite

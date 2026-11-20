@@ -560,6 +560,28 @@
                 </div>
               </div>
             </div>
+
+            <!-- User Uploaded Documents Section in Ingest -->
+            <div class="card user-documents-section" style="margin-top: 24px;">
+              <div class="card-row-head" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 16px;">
+                <div>
+                  <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: var(--ink);">📁 Your Uploaded Documents</h3>
+                  <p style="margin: 4px 0 0; font-size: 13px; color: var(--ink-2);">Syllabus and note PDFs saved to your account. These stay attached to your profile across logins.</p>
+                </div>
+                <button type="button" id="btn-refresh-user-docs" class="btn-soft" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 12px;">
+                  <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2;">
+                    <path d="M23 4v6h-6" /><path d="M1 20v-6h6" />
+                    <path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15" />
+                  </svg>
+                  <span>Refresh</span>
+                </button>
+              </div>
+              <div id="user-docs-container">
+                <div class="empty-docs-msg" style="padding: 24px; text-align: center; color: var(--muted); font-size: 13px;">
+                  Loading your documents...
+                </div>
+              </div>
+            </div>
           </section>
 
           <!-- TAB 3: VIVA EVALUATION BENCHMARK -->
@@ -765,6 +787,28 @@
               <div class="subject-directory-grid" id="subject-units-directory" data-testid="subject-directory">
                 <div class="empty-tree-msg">No syllabus materials indexed yet. Use the "PDF Syllabus Ingest" tab to
                   upload your first document.</div>
+              </div>
+            </div>
+
+            <!-- User Uploaded Documents Section in Corpus -->
+            <div class="card user-documents-section" style="margin-top: 24px;">
+              <div class="card-row-head" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 16px;">
+                <div>
+                  <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: var(--ink);">📁 Your Uploaded Documents</h3>
+                  <p style="margin: 4px 0 0; font-size: 13px; color: var(--ink-2);">Syllabus and note PDFs saved to your account. These stay attached to your profile across logins.</p>
+                </div>
+                <button type="button" id="btn-refresh-corpus-user-docs" class="btn-soft" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 12px;">
+                  <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2;">
+                    <path d="M23 4v6h-6" /><path d="M1 20v-6h6" />
+                    <path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15" />
+                  </svg>
+                  <span>Refresh</span>
+                </button>
+              </div>
+              <div id="corpus-user-docs-container">
+                <div class="empty-docs-msg" style="padding: 24px; text-align: center; color: var(--muted); font-size: 13px;">
+                  Loading your documents...
+                </div>
               </div>
             </div>
           </section>

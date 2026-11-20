@@ -30,6 +30,10 @@ from backend.app.auth import (
     get_client_ip,
     check_and_increment_daily_query,
     check_and_increment_global_daily_query,
+    save_user_document,
+    get_user_documents,
+    get_document_owner,
+    delete_user_document,
 )
 from backend.app.models import (
     Chunk,
@@ -247,7 +251,9 @@ async def security_middleware(request: Request, call_next):
                         path,
                     )
 
-                is_admin_endpoint = False
+                is_admin_endpoint = (
+                    (request.method == "POST" and path.endswith("/generate-sample-syllabus"))
+                )
                 if is_admin_endpoint:
                     is_admin_user = current_user.get("role") == "admin"
                     token = request.headers.get("X-Admin-Token", "")
@@ -273,7 +279,9 @@ async def security_middleware(request: Request, call_next):
             else:
                 # Fallback if AUTH_ENABLED is disabled
                 if _ADMIN_TOKEN:
-                    is_protected = False
+                    is_protected = (
+                        (request.method == "POST" and path.endswith("/generate-sample-syllabus"))
+                    )
                     if is_protected:
                         token = request.headers.get("X-Admin-Token", "")
                         if not hmac.compare_digest(token, _ADMIN_TOKEN):
@@ -517,6 +525,9 @@ async def ingest_document(
             detail="No readable text found in PDF. Scanned images without OCR are not supported.",
         )
 
+    current_user = get_current_user(request) if settings.AUTH_ENABLED else None
+    user_id = current_user["id"] if current_user else "anonymous"
+
     # Chunk pages with token sliding window with automatic unit detection
     chunks = chunker.process_document(
         pages_data=pages_data,
@@ -524,7 +535,8 @@ async def ingest_document(
         filename=file.filename,
         subject=clean_subject,
         unit=clean_unit,
-        owner_user_id=owner_user_id,
+        owner_user_id=user_id,
+        user_id=user_id,
     )
 
     if not chunks:
@@ -542,6 +554,21 @@ async def ingest_document(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error storing document chunks: {str(e)}",
         )
+
+    # Persist document record to user's account in SQLite
+    if current_user:
+        try:
+            save_user_document(
+                doc_id=doc_id,
+                user_id=current_user["id"],
+                filename=file.filename,
+                subject=clean_subject,
+                unit=str(clean_unit),
+                total_pages=len(pages_data),
+                total_chunks=len(chunks),
+            )
+        except Exception as e:
+            print(f"[Ingest Warning] Failed to persist user document record: {e}")
 
     return IngestResponse(
         doc_id=doc_id,
@@ -852,6 +879,23 @@ async def evaluate_rag_retrieval(request: Request, eval_input: EvaluationQueryIn
 
 
 # ---------------------------------------------------------
+# User Documents List Endpoint
+# ---------------------------------------------------------
+@app.get(
+    f"{settings.API_PREFIX}/user/documents",
+    tags=["Management"],
+    summary="Get all documents uploaded by the current authenticated user",
+)
+async def get_my_documents(request: Request):
+    """Returns list of documents uploaded by the authenticated user account."""
+    current_user = get_current_user(request) if settings.AUTH_ENABLED else None
+    if not current_user:
+        return {"documents": []}
+    docs = get_user_documents(current_user["id"])
+    return {"documents": docs}
+
+
+# ---------------------------------------------------------
 # Document Deletion Endpoint
 # ---------------------------------------------------------
 @app.delete(
@@ -859,8 +903,29 @@ async def evaluate_rag_retrieval(request: Request, eval_input: EvaluationQueryIn
     tags=["Management"],
     summary="Delete a document and its chunks from both Chroma and BM25",
 )
-async def delete_document(request: Request, doc_id: str):
+async def delete_document(doc_id: str, request: Request):
     """Removes all chunks belonging to doc_id from Chroma and re-indexes BM25."""
+    current_user = get_current_user(request) if settings.AUTH_ENABLED else None
+    is_admin = False
+    if current_user and current_user.get("role") == "admin":
+        is_admin = True
+    token = request.headers.get("X-Admin-Token", "")
+    if _ADMIN_TOKEN and hmac.compare_digest(token, _ADMIN_TOKEN):
+        is_admin = True
+
+    owner_id = get_document_owner(doc_id)
+    if owner_id:
+        if not is_admin and (not current_user or current_user["id"] != owner_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only delete documents uploaded by your account.",
+            )
+    elif not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required to delete system documents.",
+        )
+
     try:
         owner_user_id = require_user_id(request)
         owned_chunks = vector_store.get_all_chunks(owner_user_id=owner_user_id)
@@ -868,7 +933,10 @@ async def delete_document(request: Request, doc_id: str):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found in your personal corpus.")
         vector_store.delete_document(doc_id)
         bm25_index.remove_document(doc_id)
+        delete_user_document(doc_id)
         return {"message": f"Document '{doc_id}' successfully removed from indexes."}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

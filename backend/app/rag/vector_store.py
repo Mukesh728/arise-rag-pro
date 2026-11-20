@@ -120,6 +120,8 @@ class ChromaVectorStore:
             }
             if chunk.metadata.unit is not None:
                 meta_dict["unit"] = int(chunk.metadata.unit)
+            if getattr(chunk.metadata, "user_id", None):
+                meta_dict["user_id"] = str(chunk.metadata.user_id)
             metadatas.append(meta_dict)
 
         # Upsert ensures that existing chunks with the same ID get updated without error

@@ -81,6 +81,37 @@ def init_db():
                     query_count INTEGER NOT NULL DEFAULT 0
                 )
             """)
+
+            # Persistent table for user-uploaded documents
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS user_documents (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    unit TEXT NOT NULL,
+                    total_pages INTEGER NOT NULL DEFAULT 0,
+                    total_chunks INTEGER NOT NULL DEFAULT 0,
+                    uploaded_at REAL NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_user_documents_user ON user_documents(user_id)")
+
+            # Auto-backfill existing uploaded documents into admin user accounts if empty or missing
+            admins = conn.execute("SELECT id FROM users WHERE role = 'admin'").fetchall()
+            sample_docs = [
+                ("doc_051a25df", "Human Computer Interaction Notes.pdf", "Human Computer Interaction", "Unit 3", 10, 18, 1730562840.0),
+                ("doc_8ffa3f83", "CSE Sem 7 Syllabus.pdf", "CSE Sem 7 Syllabus", "Unit 1", 8, 13, 1729615740.0)
+            ]
+            for admin_row in admins:
+                uid = admin_row["id"]
+                for (doc_id, fname, subj, unit, pages, chunks, up_time) in sample_docs:
+                    record_id = f"{doc_id}_{uid[:8]}" if uid != "reg-user" else doc_id
+                    conn.execute("""
+                        INSERT OR IGNORE INTO user_documents (id, user_id, filename, subject, unit, total_pages, total_chunks, uploaded_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (record_id, uid, fname, subj, unit, pages, chunks, up_time))
     finally:
         conn.close()
 
@@ -420,6 +451,81 @@ def check_and_increment_global_daily_query() -> bool:
                 ON CONFLICT(usage_date) DO UPDATE SET query_count = query_count + 1
             """, (today,))
             return True
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------
+# User Document Store Helpers
+# ---------------------------------------------------------
+def save_user_document(
+    doc_id: str,
+    user_id: str,
+    filename: str,
+    subject: str,
+    unit: str,
+    total_pages: int = 0,
+    total_chunks: int = 0,
+) -> Dict[str, Any]:
+    now = time.time()
+    conn = get_db_conn()
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO user_documents (id, user_id, filename, subject, unit, total_pages, total_chunks, uploaded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (doc_id, user_id, filename, subject, str(unit), total_pages, total_chunks, now)
+            )
+        return {
+            "id": doc_id,
+            "user_id": user_id,
+            "filename": filename,
+            "subject": subject,
+            "unit": str(unit),
+            "total_pages": total_pages,
+            "total_chunks": total_chunks,
+            "uploaded_at": now,
+        }
+    finally:
+        conn.close()
+
+
+def get_user_documents(user_id: str) -> list:
+    conn = get_db_conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT id, user_id, filename, subject, unit, total_pages, total_chunks, uploaded_at
+            FROM user_documents
+            WHERE user_id = ?
+            ORDER BY uploaded_at DESC
+            """,
+            (user_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_document_owner(doc_id: str) -> Optional[str]:
+    conn = get_db_conn()
+    try:
+        row = conn.execute(
+            "SELECT user_id FROM user_documents WHERE id = ? OR id LIKE ?",
+            (doc_id, f"{doc_id}_%")
+        ).fetchone()
+        return row["user_id"] if row else None
+    finally:
+        conn.close()
+
+
+def delete_user_document(doc_id: str):
+    conn = get_db_conn()
+    try:
+        with conn:
+            conn.execute("DELETE FROM user_documents WHERE id = ? OR id LIKE ?", (doc_id, f"{doc_id}_%"))
     finally:
         conn.close()
 
