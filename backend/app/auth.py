@@ -309,7 +309,7 @@ def record_signup(ip: str):
 
 
 def bootstrap_admin():
-    """Bootstraps the initial admin user if ADMIN_EMAIL and ADMIN_PASSWORD are provided and user doesn't exist."""
+    """Create or reconcile the configured administrator account."""
     admin_email = os.getenv("ADMIN_EMAIL")
     admin_password = os.getenv("ADMIN_PASSWORD")
     if not admin_email or not admin_password:
@@ -317,7 +317,10 @@ def bootstrap_admin():
     admin_email = admin_email.strip().lower()
     conn = get_db_conn()
     try:
-        user = conn.execute("SELECT id FROM users WHERE email = ?", (admin_email,)).fetchone()
+        user = conn.execute(
+            "SELECT id, role, password_hash FROM users WHERE email = ?",
+            (admin_email,),
+        ).fetchone()
         if not user:
             user_id = str(uuid.uuid4())
             pw_hash = hash_password(admin_password)
@@ -327,6 +330,22 @@ def bootstrap_admin():
                     (user_id, admin_email, pw_hash, time.time())
                 )
             logger.info("[Auth] Bootstrapped initial admin user.")
+        else:
+            password_changed = not check_password(admin_password, user["password_hash"])
+            if user["role"] != "admin" or password_changed:
+                updates = ["role = 'admin'"]
+                params = []
+                if password_changed:
+                    updates.append("password_hash = ?")
+                    params.append(hash_password(admin_password))
+                updates.append("token_version = token_version + 1")
+                params.append(user["id"])
+                with conn:
+                    conn.execute(
+                        f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
+                        tuple(params),
+                    )
+                logger.info("[Auth] Reconciled configured administrator account.")
     finally:
         conn.close()
 
