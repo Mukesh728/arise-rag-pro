@@ -247,11 +247,7 @@ async def security_middleware(request: Request, call_next):
                         path,
                     )
 
-                is_admin_endpoint = (
-                    (request.method == "POST" and path.endswith("/ingest"))
-                    or (request.method == "DELETE" and "/documents/" in path)
-                    or (request.method == "POST" and path.endswith("/generate-sample-syllabus"))
-                )
+                is_admin_endpoint = False
                 if is_admin_endpoint:
                     is_admin_user = current_user.get("role") == "admin"
                     token = request.headers.get("X-Admin-Token", "")
@@ -277,11 +273,7 @@ async def security_middleware(request: Request, call_next):
             else:
                 # Fallback if AUTH_ENABLED is disabled
                 if _ADMIN_TOKEN:
-                    is_protected = (
-                        (request.method == "POST" and path.endswith("/ingest"))
-                        or (request.method == "DELETE" and "/documents/" in path)
-                        or (request.method == "POST" and path.endswith("/generate-sample-syllabus"))
-                    )
+                    is_protected = False
                     if is_protected:
                         token = request.headers.get("X-Admin-Token", "")
                         if not hmac.compare_digest(token, _ADMIN_TOKEN):
@@ -347,6 +339,16 @@ async def security_middleware(request: Request, call_next):
 
     response = await call_next(request)
     return add_security_headers(response, path)
+
+
+def require_user_id(request: Request) -> str:
+    """Return the authenticated user ID for personal corpus operations."""
+    user = get_current_user(request)
+    if not user:
+        if os.getenv("AUTH_ENABLED", "true").lower() in ("false", "0", "no"):
+            return "anonymous"
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return str(user["id"])
 
 
 # ---------------------------------------------------------
@@ -424,6 +426,7 @@ async def health_check():
     summary="Upload and index a syllabus/notes PDF document",
 )
 async def ingest_document(
+    request: Request,
     file: UploadFile = File(..., description="PDF file to ingest"),
     subject: str = Form(..., description="Course/Subject name, e.g. Operating Systems"),
     unit: str = Form("1", description="Unit or Chapter number, e.g. Unit 1"),
@@ -436,6 +439,7 @@ async def ingest_document(
     5. Embeds and saves chunks into ChromaDB with metadata.
     6. Adds chunks to the in-memory BM25 index for keyword retrieval.
     """
+    owner_user_id = require_user_id(request)
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -520,6 +524,7 @@ async def ingest_document(
         filename=file.filename,
         subject=clean_subject,
         unit=clean_unit,
+        owner_user_id=owner_user_id,
     )
 
     if not chunks:
@@ -558,13 +563,15 @@ async def ingest_document(
     tags=["RAG Query"],
     summary="Ask a question against syllabus materials with citation tracking",
 )
-def query_rag(request: QueryRequest):
+def query_rag(request: Request, query_request: QueryRequest):
     """
     Processes student query using Vector Search or Hybrid Search (Vector + BM25 + RRF).
     Extracts citations and generates a grounded Gemini answer with strict page references.
     """
     start_time = time.time()
-    query_text = request.query.strip()
+    owner_user_id = require_user_id(request)
+    request_data = query_request
+    query_text = request_data.query.strip()
     if not query_text:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -576,13 +583,13 @@ def query_rag(request: QueryRequest):
             detail="Query text cannot exceed 1000 characters.",
         )
 
-    search_mode = request.mode.strip().lower() if request.mode else "hybrid"
+    search_mode = request_data.mode.strip().lower() if request_data.mode else "hybrid"
     threshold = (
-        request.threshold
-        if request.threshold is not None
+        request_data.threshold
+        if request_data.threshold is not None
         else settings.SIMILARITY_THRESHOLD
     )
-    raw_top_k = request.top_k if request.top_k > 0 else settings.DEFAULT_TOP_K
+    raw_top_k = request_data.top_k if request_data.top_k > 0 else settings.DEFAULT_TOP_K
     top_k = max(1, min(8, int(raw_top_k)))
 
     # Step 1: Retrieve chunks using selected search mode
@@ -590,10 +597,11 @@ def query_rag(request: QueryRequest):
     try:
         retrieved_chunks = hybrid_service.search(
             query=query_text,
-            subject=request.subject,
-            unit=request.unit,
+            subject=request_data.subject,
+            unit=request_data.unit,
             mode=search_mode,
             top_k=top_k,
+            owner_user_id=owner_user_id,
         )
     except VectorSearchError as e:
         raise HTTPException(
@@ -660,7 +668,7 @@ def query_rag(request: QueryRequest):
         context_chunks = retrieved_chunks
         if settings.NEIGHBOR_EXPANSION and retrieved_chunks:
             try:
-                all_chunks = vector_store.get_all_chunks()
+                all_chunks = vector_store.get_all_chunks(owner_user_id=owner_user_id)
                 context_chunks = expand_neighbor_chunks(
                     selected_chunks=retrieved_chunks,
                     all_chunks=all_chunks,
@@ -732,10 +740,10 @@ def query_rag(request: QueryRequest):
     tags=["Metadata"],
     summary="Get distinct subjects and units for dropdown filters",
 )
-async def get_filter_options():
+async def get_filter_options(request: Request):
     """Returns available subjects and associated units to populate UI dropdowns."""
     try:
-        data = vector_store.get_distinct_subjects_and_units()
+        data = vector_store.get_distinct_subjects_and_units(owner_user_id=require_user_id(request))
         return FilterOptions(
             subjects=data.get("subjects", []),
             units_by_subject=data.get("units_by_subject", {}),
@@ -758,12 +766,13 @@ async def get_filter_options():
     tags=["Evaluation"],
     summary="Benchmark retrieval accuracy: Vector Search vs Hybrid Search",
 )
-async def evaluate_rag_retrieval(eval_input: EvaluationQueryInput):
+async def evaluate_rag_retrieval(request: Request, eval_input: EvaluationQueryInput):
     """
     Runs each test question through both Vector Search and Hybrid Search.
     Verifies if the expected page appears in the top-K retrieved chunks (Hit Rate@K).
     Returns comparative performance metrics for viva demonstration and reports.
     """
+    owner_user_id = require_user_id(request)
     queries = eval_input.queries
     if not queries:
         raise HTTPException(
@@ -787,6 +796,7 @@ async def evaluate_rag_retrieval(eval_input: EvaluationQueryInput):
             unit=unit,
             mode="vector",
             top_k=top_k,
+            owner_user_id=owner_user_id,
         )
         v_pages = [c.metadata.page_number for c in v_chunks]
         v_snippets = [c.text[:120] for c in v_chunks]
@@ -801,6 +811,7 @@ async def evaluate_rag_retrieval(eval_input: EvaluationQueryInput):
             unit=unit,
             mode="hybrid",
             top_k=top_k,
+            owner_user_id=owner_user_id,
         )
         h_pages = [c.metadata.page_number for c in h_chunks]
         h_snippets = [c.text[:120] for c in h_chunks]
@@ -848,9 +859,13 @@ async def evaluate_rag_retrieval(eval_input: EvaluationQueryInput):
     tags=["Management"],
     summary="Delete a document and its chunks from both Chroma and BM25",
 )
-async def delete_document(doc_id: str):
+async def delete_document(request: Request, doc_id: str):
     """Removes all chunks belonging to doc_id from Chroma and re-indexes BM25."""
     try:
+        owner_user_id = require_user_id(request)
+        owned_chunks = vector_store.get_all_chunks(owner_user_id=owner_user_id)
+        if not any(c.metadata.doc_id == doc_id for c in owned_chunks):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found in your personal corpus.")
         vector_store.delete_document(doc_id)
         bm25_index.remove_document(doc_id)
         return {"message": f"Document '{doc_id}' successfully removed from indexes."}
@@ -869,7 +884,7 @@ async def delete_document(doc_id: str):
     tags=["Ingestion"],
     summary="Generate and index sample MRSPTU Operating Systems syllabus for testing and viva",
 )
-async def generate_sample_syllabus():
+async def generate_sample_syllabus(request: Request):
     """
     Seeds the ChromaDB vector store and BM25 index with a standard 5-page
     MRSPTU Operating Systems syllabus covering Unit 1 & Unit 2:
@@ -879,7 +894,8 @@ async def generate_sample_syllabus():
     - Page 4 (Unit 2): Deadlocks, Coffman Conditions, Banker's Algorithm, Safety Algorithm
     - Page 5 (Unit 2): Memory Management, Paging, Page Table, TLB hit ratio and EMAT calculation, Thrashing
     """
-    doc_id = "doc_mrsptu_os_sample"
+    owner_user_id = require_user_id(request)
+    doc_id = f"doc_mrsptu_os_sample_{owner_user_id[:8]}"
     filename = "MRSPTU_Operating_Systems_Syllabus.pdf"
     subject = "Operating Systems"
 
@@ -1008,10 +1024,12 @@ async def generate_sample_syllabus():
 
     # Delete existing sample if already present to allow clean re-seed
     try:
-        vector_store.delete_document(doc_id)
-        bm25_index.remove_document(doc_id)
-    except Exception:
-        pass
+        owned_chunks = vector_store.get_all_chunks(owner_user_id=owner_user_id)
+        if any(c.metadata.doc_id == doc_id for c in owned_chunks):
+            vector_store.delete_document(doc_id)
+            bm25_index.remove_document(doc_id)
+    except Exception as exc:
+        print(f"[Sample Reset Warning] Could not reset personal sample: {exc}")
 
     created_chunks: List[Chunk] = []
     for p in sample_pages:
@@ -1032,6 +1050,7 @@ async def generate_sample_syllabus():
             char_start=0,
             char_end=len(text_content),
             token_count=len(text_content.split()),
+            owner_user_id=owner_user_id,
         )
         created_chunks.append(Chunk(chunk_id=chunk_id, text=text_content, metadata=meta))
 

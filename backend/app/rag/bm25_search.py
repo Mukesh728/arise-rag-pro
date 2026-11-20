@@ -39,7 +39,8 @@ class BM25Index:
         query: str,
         subject: Optional[str] = None,
         unit: Optional[str] = None,
-        top_k: int = 10
+        top_k: int = 10,
+        owner_user_id: Optional[str] = None
     ) -> List[Tuple[Chunk, float]]:
         """
         Search chunks using BM25, respecting subject and unit metadata filters.
@@ -58,6 +59,8 @@ class BM25Index:
         for i, score in enumerate(scores):
             chunk = self.chunks[i]
             # Metadata filter check
+            if owner_user_id and chunk.metadata.owner_user_id != owner_user_id:
+                continue
             if subject and subject.strip().lower() != "all":
                 if chunk.metadata.subject.strip().lower() != subject.strip().lower():
                     continue

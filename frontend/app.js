@@ -72,22 +72,14 @@ function initMRSPTUApp() {
     if (profileAvatar) profileAvatar.textContent = initials;
     if (railAvatar) railAvatar.textContent = initials;
 
-    // Admin-only PDF Ingest tab and action buttons (hidden for role === "user")
-    const isAdmin = user.role === "admin";
+    // PDF ingest is available to every authenticated user. Uploaded documents
+    // are scoped to the current user by the backend owner_user_id filter.
     const tabBtnIngest = document.getElementById("tab-btn-ingest");
     const railIngest = document.querySelector('[data-go="ingest"]');
     const fabIngest = document.querySelector('.fab[data-go="ingest"]');
-    if (tabBtnIngest) tabBtnIngest.style.display = isAdmin ? "" : "none";
-    if (railIngest) railIngest.style.display = isAdmin ? "" : "none";
-    if (fabIngest) fabIngest.style.display = isAdmin ? "" : "none";
-
-    if (!isAdmin) {
-      const activeTab = document.querySelector(".tab-button.active");
-      if (activeTab && activeTab.getAttribute("data-tab") === "tab-ingest") {
-        const assistantBtn = document.getElementById("tab-btn-assistant");
-        if (assistantBtn) assistantBtn.click();
-      }
-    }
+    if (tabBtnIngest) tabBtnIngest.style.display = "";
+    if (railIngest) railIngest.style.display = "";
+    if (fabIngest) fabIngest.style.display = "";
   }
 
   // ---------------------------------------------------------

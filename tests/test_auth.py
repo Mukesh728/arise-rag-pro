@@ -5,8 +5,8 @@ Covers:
 1. Registration & Login (Session Cookie)
 2. /api/auth/me
 3. Unauthenticated /api/query returns 401
-4. Non-admin /api/ingest returns 403
-5. Admin /api/ingest succeeds / passes auth check
+4. Authenticated users can ingest personal PDFs
+5. Admin /api/ingest also passes auth check
 6. Logout clears cookie
 7. Login rate limiting (429 after 5 failed attempts)
 8. AUTH_ENABLED=false allows anonymous access
@@ -123,7 +123,7 @@ def test_unauthenticated_api_query_returns_401():
     assert res.json()["detail"] == "Not authenticated"
 
 
-def test_non_admin_ingest_returns_403():
+def test_authenticated_user_ingest_passes_auth_check():
     client = TestClient(app)
     # Login as student (role=user)
     client.post("/api/auth/login", json={
@@ -131,10 +131,10 @@ def test_non_admin_ingest_returns_403():
         "password": "Password123!"
     })
 
-    # Attempt ingest without admin role or admin token
+    # Personal uploads are available to every authenticated user.
+    # Missing multipart fields should produce validation 422, not auth 401/403.
     res = client.post("/api/ingest", data={})
-    assert res.status_code == 403, f"Expected 403, got {res.status_code}"
-    assert "Admin privileges required" in res.json()["detail"]
+    assert res.status_code == 422, f"Expected validation 422, got {res.status_code}: {res.text}"
 
 
 def test_admin_ingest_succeeds_auth_check():
@@ -440,7 +440,7 @@ if __name__ == "__main__":
         test_register_and_login_sets_cookie,
         test_get_me_authenticated,
         test_unauthenticated_api_query_returns_401,
-        test_non_admin_ingest_returns_403,
+        test_authenticated_user_ingest_passes_auth_check,
         test_admin_ingest_succeeds_auth_check,
         test_logout_clears_cookie,
         test_real_logout_invalidates_old_session,

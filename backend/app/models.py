@@ -11,6 +11,7 @@ class ChunkMetadata(BaseModel):
     char_start: int = 0
     char_end: int = 0
     token_count: int = 0
+    owner_user_id: Optional[str] = None
 
 
 class Chunk(BaseModel):

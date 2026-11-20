@@ -51,12 +51,11 @@ class ChromaVectorStore:
         )
         self._cached_subjects: Optional[Set[str]] = None
 
-    def get_stored_subjects(self) -> List[str]:
+    def get_stored_subjects(self, owner_user_id: Optional[str] = None) -> List[str]:
         """Return list of distinct subject names currently stored in ChromaDB."""
-        if hasattr(self, "_cached_subjects") and self._cached_subjects is not None:
-            return list(self._cached_subjects)
         try:
-            data = self.collection.get(include=["metadatas"])
+            where = {"owner_user_id": owner_user_id} if owner_user_id else None
+            data = self.collection.get(include=["metadatas"], where=where)
             subjects = set()
             for m in data.get("metadatas", []):
                 if m and m.get("subject"):
@@ -67,7 +66,7 @@ class ChromaVectorStore:
             logger.warning(f"[VectorStore] Failed to query stored subjects: {e}")
             return []
 
-    def resolve_subject(self, subject: Optional[str]) -> Optional[str]:
+    def resolve_subject(self, subject: Optional[str], owner_user_id: Optional[str] = None) -> Optional[str]:
         """
         Case- and whitespace-insensitive resolution of a query subject to the exact
         casing stored in ChromaDB metadata.
@@ -79,7 +78,7 @@ class ChromaVectorStore:
         if not sub_clean or sub_clean.lower() == "all":
             return None
 
-        stored = self.get_stored_subjects()
+        stored = self.get_stored_subjects(owner_user_id=owner_user_id)
         sub_lower = sub_clean.lower()
         for s in stored:
             if s.lower() == sub_lower:
@@ -116,7 +115,8 @@ class ChromaVectorStore:
                 "page_number": int(chunk.metadata.page_number),
                 "token_count": int(chunk.metadata.token_count),
                 "char_start": int(chunk.metadata.char_start),
-                "char_end": int(chunk.metadata.char_end)
+                "char_end": int(chunk.metadata.char_end),
+                "owner_user_id": chunk.metadata.owner_user_id or ""
             }
             if chunk.metadata.unit is not None:
                 meta_dict["unit"] = int(chunk.metadata.unit)
@@ -134,7 +134,8 @@ class ChromaVectorStore:
     def _build_where_filter(
         self,
         subject: Optional[str] = None,
-        unit: Optional[str] = None
+        unit: Optional[str] = None,
+        owner_user_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Builds ChromaDB 'where' dictionary for filtering by subject and/or unit.
@@ -143,7 +144,10 @@ class ChromaVectorStore:
         """
         filters = []
 
-        resolved_subject = self.resolve_subject(subject)
+        if owner_user_id:
+            filters.append({"owner_user_id": owner_user_id})
+
+        resolved_subject = self.resolve_subject(subject, owner_user_id=owner_user_id)
         if resolved_subject:
             filters.append({"subject": resolved_subject})
 
@@ -166,7 +170,8 @@ class ChromaVectorStore:
         query: str,
         subject: Optional[str] = None,
         unit: Optional[str] = None,
-        top_k: int = 5
+        top_k: int = 5,
+        owner_user_id: Optional[str] = None
     ) -> List[Tuple[Chunk, float]]:
         """
         Perform vector similarity search on Chroma store.
@@ -181,7 +186,7 @@ class ChromaVectorStore:
 
         # Chroma throws an error if n_results > total count
         n_results = min(top_k, total_items)
-        where_filter = self._build_where_filter(subject=subject, unit=unit)
+        where_filter = self._build_where_filter(subject=subject, unit=unit, owner_user_id=owner_user_id)
 
         try:
             results = self.collection.query(
@@ -231,7 +236,8 @@ class ChromaVectorStore:
                 page_number=int(meta.get("page_number", meta.get("page", 1))),
                 char_start=int(meta.get("char_start", 0)),
                 char_end=int(meta.get("char_end", len(text))),
-                token_count=int(meta.get("token_count", 0))
+                token_count=int(meta.get("token_count", 0)),
+                owner_user_id=meta.get("owner_user_id")
             )
 
             chunk = Chunk(
@@ -249,7 +255,7 @@ class ChromaVectorStore:
         chunks_with_scores.sort(key=lambda x: x[1], reverse=True)
         return chunks_with_scores
 
-    def get_all_chunks(self) -> List[Chunk]:
+    def get_all_chunks(self, owner_user_id: Optional[str] = None) -> List[Chunk]:
         """
         Retrieve all stored chunks from Chroma.
         Used at server startup to synchronize the in-memory BM25 index with Chroma.
@@ -258,7 +264,8 @@ class ChromaVectorStore:
         if total == 0:
             return []
 
-        data = self.collection.get(include=["documents", "metadatas"])
+        where = {"owner_user_id": owner_user_id} if owner_user_id else None
+        data = self.collection.get(include=["documents", "metadatas"], where=where)
         chunks: List[Chunk] = []
 
         ids = data.get("ids", [])
@@ -285,18 +292,19 @@ class ChromaVectorStore:
                 page_number=int(meta.get("page_number", meta.get("page", 1))),
                 char_start=int(meta.get("char_start", 0)),
                 char_end=int(meta.get("char_end", len(text))),
-                token_count=int(meta.get("token_count", 0))
+                token_count=int(meta.get("token_count", 0)),
+                owner_user_id=meta.get("owner_user_id")
             )
             chunks.append(Chunk(chunk_id=ids[i], text=text, metadata=chunk_meta))
 
         return chunks
 
-    def get_distinct_subjects_and_units(self) -> Dict[str, Any]:
+    def get_distinct_subjects_and_units(self, owner_user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Inspect all chunks in the store and return distinct subjects and their units.
         Useful for frontend dropdown selections.
         """
-        all_chunks = self.get_all_chunks()
+        all_chunks = self.get_all_chunks(owner_user_id=owner_user_id)
         subjects_set = set()
         units_by_subject: Dict[str, set] = {}
 

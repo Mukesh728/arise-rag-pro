@@ -47,7 +47,8 @@ class HybridSearchService:
         subject: Optional[str] = None,
         unit: Optional[str] = None,
         mode: str = "hybrid",
-        top_k: int = 3
+        top_k: int = 3,
+        owner_user_id: Optional[str] = None
     ) -> List[Chunk]:
         """
         Perform search using either 'vector' or 'hybrid' mode.
@@ -63,28 +64,30 @@ class HybridSearchService:
             List of ranked Chunk objects.
         """
         mode_clean = (mode or "hybrid").strip().lower()
-        resolved_subject = self.vector_store.resolve_subject(subject)
+        resolved_subject = self.vector_store.resolve_subject(subject, owner_user_id=owner_user_id)
 
         # Mode 1: Pure Vector Search
         if mode_clean == "vector":
-            return self._vector_search(query=query, subject=resolved_subject, unit=unit, top_k=top_k)
+            return self._vector_search(query=query, subject=resolved_subject, unit=unit, top_k=top_k, owner_user_id=owner_user_id)
 
         # Mode 2: Hybrid Search (Vector + BM25 fused with RRF)
-        return self._hybrid_rrf_search(query=query, subject=resolved_subject, unit=unit, top_k=top_k)
+        return self._hybrid_rrf_search(query=query, subject=resolved_subject, unit=unit, top_k=top_k, owner_user_id=owner_user_id)
 
     def _vector_search(
         self,
         query: str,
         subject: Optional[str] = None,
         unit: Optional[str] = None,
-        top_k: int = 3
+        top_k: int = 3,
+        owner_user_id: Optional[str] = None
     ) -> List[Chunk]:
         """Runs vector search only and assigns ranks."""
         vector_results = self.vector_store.search(
             query=query,
             subject=subject,
             unit=unit,
-            top_k=top_k
+            top_k=top_k,
+            owner_user_id=owner_user_id
         )
 
         ranked_chunks: List[Chunk] = []
@@ -103,7 +106,8 @@ class HybridSearchService:
         query: str,
         subject: Optional[str] = None,
         unit: Optional[str] = None,
-        top_k: int = 3
+        top_k: int = 3,
+        owner_user_id: Optional[str] = None
     ) -> List[Chunk]:
         """
         Executes both Vector Search and BM25 Search, then merges candidate lists
@@ -118,7 +122,8 @@ class HybridSearchService:
                 query=query,
                 subject=subject,
                 unit=unit,
-                top_k=candidate_k
+                top_k=candidate_k,
+                owner_user_id=owner_user_id
             )
         except VectorSearchError as e:
             logger.warning(f"[HybridSearch] Vector search failed ({e}), falling back to BM25-only.")
@@ -129,7 +134,8 @@ class HybridSearchService:
             query=query,
             subject=subject,
             unit=unit,
-            top_k=candidate_k
+            top_k=candidate_k,
+            owner_user_id=owner_user_id
         )
 
         # If both are empty, return nothing
@@ -138,7 +144,7 @@ class HybridSearchService:
 
         # If only vector candidates exist
         if vector_candidates and not bm25_candidates:
-            return self._vector_search(query=query, subject=subject, unit=unit, top_k=top_k)
+            return self._vector_search(query=query, subject=subject, unit=unit, top_k=top_k, owner_user_id=owner_user_id)
 
         # If only BM25 candidates exist
         if bm25_candidates and not vector_candidates:
