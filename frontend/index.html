@@ -594,8 +594,8 @@
               <div class="banner-copy">
                 <span class="benchmark-badge">Capstone benchmark</span>
                 <h3>Vector search vs <span class="hl">Hybrid RRF.</span></h3>
-                <p>Hit Rate@K on ground-truth viva questions mapped to exact syllabus pages — use the default set or
-                  your own.</p>
+                <p>Select an uploaded PDF subject. Arise will generate viva questions from its indexed pages and
+                  check them through the same Study Assistant retrieval path.</p>
               </div>
               <div class="benchmark-action-bar">
                 <div class="bench-field">
@@ -623,11 +623,11 @@
               <div class="card-row-head">
                 <div>
                   <h4>Question set</h4>
-                  <span class="muted-xs">Pick which questions the benchmark runs on</span>
+                  <span class="muted-xs">Questions are generated from the selected PDF and shown below</span>
                 </div>
                 <div class="seg" role="group" aria-label="Question set">
-                  <button type="button" data-qset="default" class="is-on" data-testid="qset-default">Default ·
-                    20</button>
+                  <button type="button" data-qset="default" class="is-on" data-testid="qset-default">Selected PDF ·
+                    auto</button>
                   <button type="button" data-qset="custom" data-testid="qset-custom">My questions · <span
                       id="custom-q-count">0</span></button>
                 </div>
@@ -681,7 +681,7 @@
             <div class="card benchmark-details-card">
               <div class="card-row-head">
                 <h4>Per-query breakdown</h4>
-                <span class="muted-xs" id="benchmark-query-count">0 queries evaluated</span>
+                  <span class="muted-xs" id="benchmark-query-count">0 PDF questions evaluated</span>
               </div>
               <div class="table-responsive">
                 <table class="benchmark-table" id="benchmark-results-table">
@@ -957,7 +957,7 @@
         new MutationObserver(function () {
           var n = benchBody.querySelectorAll("tr").length;
           var empty = benchBody.querySelector(".table-empty");
-          benchCount.textContent = (empty ? 0 : n) + " queries evaluated";
+              benchCount.textContent = (empty ? 0 : n) + " PDF questions evaluated";
         }).observe(benchBody, { childList: true });
       }
 

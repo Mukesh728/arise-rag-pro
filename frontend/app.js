@@ -1188,149 +1188,6 @@ function initMRSPTUApp() {
   // ---------------------------------------------------------
   // Viva Evaluation Benchmark Suite
   // ---------------------------------------------------------
-  const defaultBenchmarkQueries = [
-    {
-      id: 1,
-      question: "What are the seven graphical design concepts including Balance and visual weight in screen design?",
-      expected_page: 3,
-      subject: "Human Computer Interaction",
-      unit: "Unit 3",
-    },
-    {
-      id: 2,
-      question: "What is visible language and what are its primary components such as typography and layout?",
-      expected_page: 4,
-      subject: "Human Computer Interaction",
-      unit: "Unit 3",
-    },
-    {
-      id: 3,
-      question: "What is grid-based design and what role do columns, rows, gutters and margins play?",
-      expected_page: 6,
-      subject: "Human Computer Interaction",
-      unit: "Unit 3",
-    },
-    {
-      id: 4,
-      question: "Explain usability design principles and concepts derived from Don Norman such as affordance and feedback.",
-      expected_page: 7,
-      subject: "Human Computer Interaction",
-      unit: "Unit 3",
-    },
-    {
-      id: 5,
-      question: "What are Ben Shneiderman's Eight Golden Rules for interface design?",
-      expected_page: 8,
-      subject: "Human Computer Interaction",
-      unit: "Unit 3",
-    },
-    {
-      id: 6,
-      question: "Explain Jakob Nielsen's 10 Usability Heuristics for user interface evaluation.",
-      expected_page: 10,
-      subject: "Human Computer Interaction",
-      unit: "Unit 3",
-    },
-    {
-      id: 7,
-      question: "Compare Shneiderman's Golden Rules with Nielsen's Heuristics in terms of design guidelines vs evaluation checklist.",
-      expected_page: 12,
-      subject: "Human Computer Interaction",
-      unit: "Unit 3",
-    },
-    {
-      id: 8,
-      question: "What is Heuristic Evaluation and why are 3 to 5 expert evaluators recommended?",
-      expected_page: 13,
-      subject: "Human Computer Interaction",
-      unit: "Unit 3",
-    },
-    {
-      id: 9,
-      question: "What is an HCI design pattern and when should designers use reusable patterns?",
-      expected_page: 14,
-      subject: "Human Computer Interaction",
-      unit: "Unit 3",
-    },
-    {
-      id: 10,
-      question: "How should a student structure answers in an HCI viva including definition, purpose and example?",
-      expected_page: 15,
-      subject: "Human Computer Interaction",
-      unit: "Unit 3",
-    },
-    {
-      id: 11,
-      question: "What are the core subjects and course codes listed in MRSPTU 7th Semester B.Tech CSE study scheme?",
-      expected_page: 2,
-      subject: "CSE Sem 7 Syllabus",
-      unit: null,
-    },
-    {
-      id: 12,
-      question: "What are the course objectives, outcomes, and contents of Soft Computing BCSED1-712?",
-      expected_page: 3,
-      subject: "CSE Sem 7 Syllabus",
-      unit: null,
-    },
-    {
-      id: 13,
-      question: "What are the syllabus topics and recommended textbooks by Dix and Finlay for Human Computer Interaction BCSED1-713?",
-      expected_page: 4,
-      subject: "CSE Sem 7 Syllabus",
-      unit: "Unit 4",
-    },
-    {
-      id: 14,
-      question: "What are the course outcomes and syllabus topics for Cryptography & Network Security BCSED1-723?",
-      expected_page: 5,
-      subject: "CSE Sem 7 Syllabus",
-      unit: "Unit 4",
-    },
-    {
-      id: 15,
-      question: "What topics are covered in Artificial Intelligence BCSED1-724 including heuristic search and knowledge representation?",
-      expected_page: 6,
-      subject: "CSE Sem 7 Syllabus",
-      unit: "Unit 4",
-    },
-    {
-      id: 16,
-      question: "What natural resources and forest or water conservation topics are covered in Environmental Sciences Unit-I?",
-      expected_page: 7,
-      subject: "CSE Sem 7 Syllabus",
-      unit: "Unit 1",
-    },
-    {
-      id: 17,
-      question: "What environmental pollution types and human health topics are covered in Environmental Sciences?",
-      expected_page: 8,
-      subject: "CSE Sem 7 Syllabus",
-      unit: "Unit 4",
-    },
-    {
-      id: 18,
-      question: "Explain the concepts of ecosystems, producers, consumers, and food chains in the syllabus.",
-      expected_page: 9,
-      subject: "CSE Sem 7 Syllabus",
-      unit: "Unit 4",
-    },
-    {
-      id: 19,
-      question: "What topics are covered in Constitution of India BMNCC0-001 including Directive Principles and Article 19 and 21?",
-      expected_page: 10,
-      subject: "CSE Sem 7 Syllabus",
-      unit: "Unit 4",
-    },
-    {
-      id: 20,
-      question: "What is the difference between Recognition vs Recall and Affordance vs Mapping in UI design?",
-      expected_page: 12,
-      subject: "Human Computer Interaction",
-      unit: "Unit 3",
-    },
-  ];
-
   if (btnRunBenchmark) {
     btnRunBenchmark.addEventListener("click", async () => {
       btnRunBenchmark.classList.add("loading");
@@ -1339,13 +1196,27 @@ function initMRSPTUApp() {
       const selectedSubj = (evalSubjectFilter && evalSubjectFilter.value !== "all") ? evalSubjectFilter.value : null;
       const topK = evalTopK ? parseInt(evalTopK.value, 10) : 3;
 
-      const payload = {
-        queries: defaultBenchmarkQueries,
-        subject: selectedSubj,
-        top_k: topK,
-      };
-
       try {
+        if (!selectedSubj) {
+          throw new Error("Select an uploaded PDF subject first. Questions are generated from that PDF.");
+        }
+
+        showToast("Generating viva questions from the selected PDF...", "info");
+        const questionRes = await fetch(
+          `/api/evaluate/questions?subject=${encodeURIComponent(selectedSubj)}&count=10`
+        );
+        const questionData = await questionRes.json().catch(() => ({}));
+        if (!questionRes.ok || !questionData.questions || questionData.questions.length === 0) {
+          throw new Error(questionData.detail || "No readable PDF content found for this subject.");
+        }
+
+        const payload = {
+          queries: questionData.questions,
+          subject: selectedSubj,
+          top_k: topK,
+        };
+
+        showToast(`Checking ${questionData.questions.length} PDF-generated questions in Study Assistant...`, "info");
         const res = await fetch("/api/evaluate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1359,7 +1230,7 @@ function initMRSPTUApp() {
 
         const report = await res.json();
         renderBenchmarkReport(report);
-        showToast("Evaluation Benchmark complete!", "success");
+        showToast("PDF-specific benchmark complete. Questions were checked through Study Assistant retrieval.", "success");
       } catch (err) {
         showToast(`Benchmark Error: ${err.message}`, "error");
       } finally {

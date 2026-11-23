@@ -9,6 +9,7 @@ Provides REST API endpoints for:
 """
 
 import os
+import re
 import time
 import uuid
 import shutil
@@ -787,6 +788,74 @@ async def get_filter_options(request: Request):
 # ---------------------------------------------------------
 # Evaluation Benchmark Endpoint (Vector vs Hybrid Search)
 # ---------------------------------------------------------
+def _build_pdf_benchmark_question(text: str) -> str:
+    """Build a grounded, retrieval-friendly viva question from one PDF chunk."""
+    normalized = re.sub(r"\s+", " ", text or "").strip()
+    if not normalized:
+        return "What important concept is explained on this page of the uploaded PDF?"
+
+    sentences = [s.strip(" -:;") for s in re.split(r"(?<=[.!?])\s+", normalized)]
+    candidate = next(
+        (s for s in sentences if 8 <= len(s.split()) <= 34),
+        normalized[:220].rstrip(" .,;:"),
+    )
+    return f"Explain the concept described in the uploaded PDF: {candidate}?"
+
+
+@app.get(
+    f"{settings.API_PREFIX}/evaluate/questions",
+    tags=["Evaluation"],
+    summary="Generate grounded viva questions from a selected subject",
+)
+async def generate_benchmark_questions(
+    request: Request,
+    subject: str = Query(..., min_length=1),
+    unit: Optional[str] = Query(None),
+    count: int = Query(10, ge=1, le=20),
+):
+    """Create page-grounded questions from the current user's indexed PDF chunks."""
+    owner_user_id = require_user_id(request)
+    selected_subject = vector_store.resolve_subject(subject, owner_user_id=owner_user_id)
+    chunks = vector_store.get_all_chunks(owner_user_id=owner_user_id)
+    chunks = [c for c in chunks if c.metadata.subject == selected_subject]
+
+    if unit and unit.strip().lower() not in ("", "all"):
+        unit_match = re.search(r"\d+", unit)
+        if unit_match:
+            selected_unit = int(unit_match.group(0))
+            chunks = [c for c in chunks if c.metadata.unit == selected_unit]
+
+    if not chunks:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No indexed PDF chunks found for the selected subject/unit.",
+        )
+
+    # Use one representative chunk per page so the expected page is meaningful.
+    page_chunks: Dict[int, Chunk] = {}
+    for chunk in sorted(chunks, key=lambda c: (c.metadata.page_number, c.chunk_id)):
+        page_chunks.setdefault(chunk.metadata.page_number, chunk)
+
+    questions = []
+    for idx, (page_number, chunk) in enumerate(list(page_chunks.items())[:count], start=1):
+        questions.append(
+            EvaluationItem(
+                id=idx,
+                question=_build_pdf_benchmark_question(chunk.text),
+                expected_page=page_number,
+                subject=selected_subject,
+                unit=f"Unit {chunk.metadata.unit}" if chunk.metadata.unit is not None else None,
+            )
+        )
+
+    return {
+        "subject": selected_subject,
+        "unit": unit or "All",
+        "total_questions": len(questions),
+        "questions": questions,
+    }
+
+
 @app.post(
     f"{settings.API_PREFIX}/evaluate",
     response_model=EvaluationReport,
