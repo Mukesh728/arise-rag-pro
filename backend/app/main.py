@@ -35,6 +35,8 @@ from backend.app.auth import (
     get_user_documents,
     get_document_owner,
     delete_user_document,
+    restore_user_record,
+    get_all_users,
 )
 from backend.app.models import (
     Chunk,
@@ -56,6 +58,7 @@ from backend.app.rag.vector_store import ChromaVectorStore, VectorSearchError
 from backend.app.rag.hybrid_search import HybridSearchService
 from backend.app.rag.llm import GeminiAnswerGenerator, NOT_FOUND_MESSAGE, LLM_UNAVAILABLE_MESSAGE
 from backend.app.rag.guardrail import evaluate as guardrail_evaluate
+from backend.app import supabase_persistence
 
 
 def expand_neighbor_chunks(
@@ -137,6 +140,51 @@ chunker = TokenChunker(
 )
 
 
+def _restore_supabase_state() -> None:
+    """Restore durable users and PDF documents after a Render restart."""
+    if not supabase_persistence.enabled():
+        return
+
+    try:
+        remote_users = supabase_persistence.list_users()
+        for user in remote_users:
+            restore_user_record(user)
+        for user in get_all_users():
+            supabase_persistence.upsert_user(user)
+
+        restored = 0
+        for record in supabase_persistence.list_documents():
+            if get_document_owner(record["id"]):
+                continue
+            file_bytes = supabase_persistence.download_document(record["storage_path"])
+            if not file_bytes:
+                print(f"[Supabase] Could not download {record['id']}; skipping restore.")
+                continue
+            pages_data = PDFExtractor.extract_pages_from_bytes(file_bytes)
+            chunks = chunker.process_document(
+                pages_data=pages_data,
+                doc_id=record["id"],
+                filename=record["filename"],
+                subject=record["subject"],
+                unit=int(record.get("unit") or 1),
+                owner_user_id=record["user_id"],
+                user_id=record["user_id"],
+            )
+            if chunks:
+                vector_store.add_chunks(chunks)
+                bm25_index.add_chunks(chunks)
+                save_user_document(
+                    doc_id=record["id"], user_id=record["user_id"],
+                    filename=record["filename"], subject=record["subject"],
+                    unit=str(record.get("unit") or 1),
+                    total_pages=len(pages_data), total_chunks=len(chunks),
+                )
+                restored += 1
+        print(f"[Supabase] Restored {len(remote_users)} users and {restored} PDF documents.")
+    except Exception as e:
+        print(f"[Supabase Warning] Startup restore failed: {e}")
+
+
 # ---------------------------------------------------------
 # Application Lifespan (Startup / Shutdown)
 # ---------------------------------------------------------
@@ -149,7 +197,14 @@ async def lifespan(app: FastAPI):
     3. Synchronizes in-memory BM25 index with all chunks persisted in Chroma.
     """
     init_db()
+    _restore_supabase_state()
     bootstrap_admin()
+    if supabase_persistence.enabled():
+        try:
+            for user in get_all_users():
+                supabase_persistence.upsert_user(user)
+        except Exception as e:
+            print(f"[Supabase Warning] User mirror after admin bootstrap failed: {e}")
     if settings.ENV == "production" and settings.AUTH_ENABLED:
         if not os.getenv("SESSION_SECRET"):
             raise RuntimeError("SESSION_SECRET must be set when ENV=production and AUTH_ENABLED=true")
@@ -559,7 +614,7 @@ async def ingest_document(
     # Persist document record to user's account in SQLite
     if current_user:
         try:
-            save_user_document(
+            document_record = save_user_document(
                 doc_id=doc_id,
                 user_id=current_user["id"],
                 filename=file.filename,
@@ -568,6 +623,12 @@ async def ingest_document(
                 total_pages=len(pages_data),
                 total_chunks=len(chunks),
             )
+            try:
+                storage_path = supabase_persistence.upsert_document(document_record, file_bytes)
+                if storage_path:
+                    print(f"[Supabase] Persisted PDF {doc_id} at durable storage path.")
+            except Exception as remote_error:
+                print(f"[Supabase Warning] PDF mirror failed for {doc_id}: {remote_error}")
         except Exception as e:
             print(f"[Ingest Warning] Failed to persist user document record: {e}")
 

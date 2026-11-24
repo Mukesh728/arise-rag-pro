@@ -23,6 +23,7 @@ from pydantic import BaseModel, EmailStr
 from fastapi import APIRouter, Request, Response, HTTPException, status
 from fastapi.responses import JSONResponse
 import bcrypt
+from backend.app import supabase_persistence
 
 logger = logging.getLogger("arise.auth")
 
@@ -112,6 +113,37 @@ def init_db():
                         INSERT OR IGNORE INTO user_documents (id, user_id, filename, subject, unit, total_pages, total_chunks, uploaded_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (record_id, uid, fname, subj, unit, pages, chunks, up_time))
+    finally:
+        conn.close()
+
+
+def restore_user_record(user: Dict[str, Any]) -> None:
+    """Restore a durable Supabase user into the local SQLite cache."""
+    conn = get_db_conn()
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO users (id, email, password_hash, role, token_version, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user["id"], user["email"], user["password_hash"],
+                    user.get("role", "user"), int(user.get("token_version", 0)),
+                    float(user.get("created_at", time.time())),
+                ),
+            )
+    finally:
+        conn.close()
+
+
+def get_all_users() -> list:
+    conn = get_db_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id, email, password_hash, role, token_version, created_at FROM users"
+        ).fetchall()
+        return [dict(row) for row in rows]
     finally:
         conn.close()
 
@@ -579,6 +611,18 @@ async def register(payload: AuthPayload, request: Request, response: Response):
             )
     finally:
         conn.close()
+
+    try:
+        supabase_persistence.upsert_user({
+            "id": user_id,
+            "email": email,
+            "password_hash": pw_hash,
+            "role": "user",
+            "token_version": 0,
+            "created_at": time.time(),
+        })
+    except Exception as e:
+        logger.warning("[Supabase] User mirror failed after registration: %s", e)
 
     record_signup(client_ip)
     token = sign_session(user_id, 0)
