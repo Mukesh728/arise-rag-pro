@@ -2,6 +2,15 @@
 
 This document details the production deployment procedures, security architecture, environment variable reference, container volume configuration, and rollback instructions for **Arise.ai** (MRSPTU StudyRAG).
 
+## 0. Recommended Free Architecture
+
+- **Render Free** runs the existing Dockerized FastAPI backend and serves the existing frontend.
+- **Supabase Free** stores PostgreSQL metadata, 384-dimensional pgvector embeddings, document chunks, chat history, and private PDF Storage objects.
+- **Gemini integration** remains unchanged and is called only by the backend.
+- Set `VECTOR_STORE_TYPE=pgvector`; local Chroma remains available only as a rollback/migration source.
+
+Run `supabase/001_arise_schema.sql` first, verify the tables and private `arise-pdfs` bucket, then deploy the code and set Render variables. Do not delete the old Chroma data or Render service until health, login, upload, query, restart, and chat-history checks pass.
+
 ---
 
 ## 1. Pre-Deployment Checklist

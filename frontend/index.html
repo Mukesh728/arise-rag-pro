@@ -137,10 +137,10 @@
 
         <div class="side-block">
           <span class="side-label">Index status</span>
-          <div class="status-indicator-pill" id="server-status-pill" title="FastAPI ChromaDB Vector Store Status"
+          <div class="status-indicator-pill" id="server-status-pill" title="FastAPI Supabase pgvector Status"
             data-testid="server-status">
             <span class="status-dot online" id="status-dot"></span>
-            <span class="status-label" id="status-label">ChromaDB Online</span>
+            <span class="status-label" id="status-label">Supabase pgvector Online</span>
             <span class="chunk-badge" id="header-chunk-count" data-testid="header-chunk-count">0 Chunks</span>
           </div>
         </div>
@@ -327,7 +327,7 @@
                       <span class="mode-check"></span>
                       <div>
                         <span class="mode-title">Vector only</span>
-                        <p class="mode-desc">ChromaDB dense similarity without keyword fusion.</p>
+                        <p class="mode-desc">Supabase pgvector dense similarity without keyword fusion.</p>
                       </div>
                     </div>
                   </label>
@@ -445,7 +445,7 @@
                     </svg></span>
                   <div>
                     <h2 class="card-title">Upload course material</h2>
-                    <p class="card-desc">Syllabus, lecture notes or textbooks — indexed into ChromaDB and BM25.</p>
+                    <p class="card-desc">Syllabus, lecture notes or textbooks — indexed into Supabase pgvector and BM25.</p>
                   </div>
                 </div>
 
@@ -502,7 +502,7 @@
                         pages, keeping 1-indexed page numbers</span></li>
                     <li class="explainer-step"><span class="step-num">2</span><span class="step-txt">TokenChunker splits
                         ~500 tokens with 50-token overlap</span></li>
-                    <li class="explainer-step"><span class="step-num">3</span><span class="step-txt">ChromaDB stores
+                    <li class="explainer-step"><span class="step-num">3</span><span class="step-txt">Supabase pgvector stores
                         embeddings, BM25Okapi indexes tokens</span></li>
                   </ol>
 
@@ -546,7 +546,7 @@
                 </div>
                 <div class="viva-qa-block">
                   <h4 class="viva-q">Dual indexing</h4>
-                  <p class="viva-a">Chunks are stored in ChromaDB for semantic retrieval and registered in the BM25
+                  <p class="viva-a">Chunks are stored in Supabase pgvector for semantic retrieval and registered in the BM25
                     Okapi index for keyword retrieval — at the same time.</p>
                 </div>
                 <div class="sample-generator-card">
@@ -723,7 +723,7 @@
                 <ul class="viva-checklist">
                   <li><strong>Hallucinations?</strong> Grounded prompting + 0.32 similarity guardrail.</li>
                   <li><strong>Chunking?</strong> ~500 tokens, 50 overlap, 1-indexed page metadata.</li>
-                  <li><strong>Why ChromaDB?</strong> Embedded, local persistence with HNSW cosine index.</li>
+                  <li><strong>Why pgvector?</strong> Managed Postgres persistence with HNSW cosine index.</li>
                   <li><strong>Metric?</strong> Hit Rate@K, Vector vs Hybrid over ground-truth pages.</li>
                 </ul>
               </div>
@@ -735,7 +735,7 @@
             <div class="card docs-header-card">
               <div>
                 <h2 class="card-title">Indexed knowledge base</h2>
-                <p class="card-desc">Documents, subjects, units and chunks in the persistent ChromaDB collection.</p>
+                <p class="card-desc">Documents, subjects, units and chunks in the persistent Supabase pgvector collection.</p>
               </div>
               <button type="button" id="btn-refresh-corpus" class="btn-soft" data-testid="refresh-corpus">
                 <svg viewBox="0 0 24 24">
@@ -776,7 +776,7 @@
                     <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
                   </svg></span>
                 <div class="cstat-val small">HNSW</div>
-                <div class="cstat-label">ChromaDB vector index</div>
+                <div class="cstat-label">Supabase pgvector index</div>
               </div>
             </div>
 
@@ -815,7 +815,7 @@
 
           <footer class="app-footer">
             <span>Arise · Department of Computer Science &amp; Engineering</span>
-            <span>FastAPI · ChromaDB · Rank-BM25 · Gemini</span>
+            <span>FastAPI · Supabase pgvector · Rank-BM25 · Gemini</span>
           </footer>
         </main>
 
@@ -876,7 +876,7 @@
             </article>
             <article class="feed-item">
               <div class="feed-author"><span class="feed-avatar a4">CH</span>
-                <div><strong>Corpus</strong><span>ChromaDB · HNSW</span></div>
+                <div><strong>Corpus</strong><span>pgvector · HNSW</span></div>
               </div>
               <p>See every subject and unit currently in the knowledge base.</p>
               <div class="feed-foot"><span class="feed-stat"><svg viewBox="0 0 24 24">

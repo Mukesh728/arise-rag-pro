@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: arise-rag-pro
+    runtime: docker
+    plan: free
+    branch: deploy-prep
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: ENV
+        value: production
+      - key: VECTOR_STORE_TYPE
+        value: pgvector
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: arise-pdfs
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: AUTH_ENABLED
+        value: "true"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: TRUSTED_PROXY_COUNT
+        value: "1"
+      - key: USERS_DB_PATH
+        value: /tmp/users.db
+      - key: ALLOW_SIGNUP
+        value: "true"
+      - key: DAILY_QUERY_LIMIT
+        value: "20"
+      - key: GLOBAL_DAILY_QUERY_LIMIT
+        value: "300"
+      - key: RATE_LIMIT_PER_HOUR
+        value: "60"

@@ -156,6 +156,22 @@ def _restore_supabase_state() -> None:
         for record in supabase_persistence.list_documents():
             if get_document_owner(record["id"]):
                 continue
+            # In pgvector mode the chunks already survive the restart. Only
+            # rebuild the SQLite compatibility record in that case.
+            try:
+                durable_chunks = vector_store.get_all_chunks(owner_user_id=record["user_id"])
+                if any(c.metadata.doc_id == record["id"] for c in durable_chunks):
+                    save_user_document(
+                        doc_id=record["id"], user_id=record["user_id"],
+                        filename=record["filename"], subject=record["subject"],
+                        unit=str(record.get("unit") or 1),
+                        total_pages=int(record.get("total_pages") or 0),
+                        total_chunks=int(record.get("total_chunks") or 0),
+                    )
+                    restored += 1
+                    continue
+            except Exception as durable_check_error:
+                print(f"[Supabase] Durable chunk check failed for {record['id']}: {durable_check_error}")
             file_bytes = supabase_persistence.download_document(record["storage_path"])
             if not file_bytes:
                 print(f"[Supabase] Could not download {record['id']}; skipping restore.")
@@ -805,6 +821,20 @@ def query_rag(request: Request, query_request: QueryRequest):
         for c in retrieved_chunks
     ]
 
+    if supabase_persistence.enabled():
+        try:
+            supabase_persistence.save_chat_history({
+                "user_id": owner_user_id,
+                "question": query_text,
+                "answer": answer,
+                "mode": search_mode,
+                "subject": request_data.subject,
+                "citations": [citation.model_dump() for citation in citations],
+                "is_fallback": is_fallback,
+            })
+        except Exception as history_error:
+            print(f"[Supabase Warning] Chat history mirror failed: {history_error}")
+
     return QueryResponse(
         query=query_text,
         answer=answer,
@@ -844,6 +874,28 @@ async def get_filter_options(request: Request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error reading filter metadata: {str(e)}",
         )
+
+
+@app.get(f"{settings.API_PREFIX}/history", tags=["History"])
+async def get_chat_history(request: Request):
+    """Return the current user's durable chat history from Supabase."""
+    user_id = require_user_id(request)
+    try:
+        return {"history": supabase_persistence.list_chat_history(user_id)}
+    except Exception as exc:
+        print(f"[Supabase Warning] Chat history read failed: {exc}")
+        return {"history": []}
+
+
+@app.delete(f"{settings.API_PREFIX}/history", tags=["History"])
+async def clear_chat_history(request: Request):
+    """Clear only the current user's durable chat history."""
+    user_id = require_user_id(request)
+    try:
+        supabase_persistence.clear_chat_history(user_id)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Could not clear durable chat history") from exc
+    return {"message": "Chat history cleared"}
 
 
 # ---------------------------------------------------------
@@ -1064,6 +1116,13 @@ async def delete_document(doc_id: str, request: Request):
         vector_store.delete_document(doc_id)
         bm25_index.remove_document(doc_id)
         delete_user_document(doc_id)
+        if supabase_persistence.enabled():
+            try:
+                remote_record = next((r for r in supabase_persistence.list_documents() if r.get("id") == doc_id), None)
+                if remote_record:
+                    supabase_persistence.delete_document(remote_record)
+            except Exception as remote_error:
+                print(f"[Supabase Warning] Remote document cleanup failed: {remote_error}")
         return {"message": f"Document '{doc_id}' successfully removed from indexes."}
     except HTTPException:
         raise

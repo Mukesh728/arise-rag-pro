@@ -139,3 +139,37 @@ def delete_document(record: Dict[str, Any]) -> None:
             pass
     doc_id = urllib.parse.quote(str(record.get("id", "")), safe="")
     _request("DELETE", f"/rest/v1/arise_documents?id=eq.{doc_id}")
+
+
+def save_chat_history(record: Dict[str, Any]) -> None:
+    """Persist a completed assistant interaction without storing credentials."""
+    if not enabled():
+        return
+    _request("POST", "/rest/v1/arise_chat_history", {
+        "user_id": record["user_id"],
+        "question": record.get("question", "")[:2000],
+        "answer": record.get("answer", "")[:12000],
+        "mode": record.get("mode", "hybrid"),
+        "subject": record.get("subject"),
+        "citations": record.get("citations", []),
+        "is_fallback": bool(record.get("is_fallback", False)),
+    })
+
+
+def list_chat_history(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    if not enabled():
+        return []
+    safe_limit = max(1, min(int(limit), 100))
+    encoded_user = urllib.parse.quote(str(user_id), safe="")
+    result = _request(
+        "GET",
+        f"/rest/v1/arise_chat_history?select=id,question,answer,mode,subject,citations,is_fallback,created_at&user_id=eq.{encoded_user}&order=created_at.desc&limit={safe_limit}",
+    )
+    return result if isinstance(result, list) else []
+
+
+def clear_chat_history(user_id: str) -> None:
+    if not enabled():
+        return
+    encoded_user = urllib.parse.quote(str(user_id), safe="")
+    _request("DELETE", f"/rest/v1/arise_chat_history?user_id=eq.{encoded_user}")

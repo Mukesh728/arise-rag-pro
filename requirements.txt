@@ -8,6 +8,7 @@ python-dotenv==1.2.4
 
 # Vector Database & Retrieval
 chromadb==1.5.9
+psycopg[binary]==3.2.12
 rank-bm25==0.2.2
 tiktoken==0.14.0
 pypdf==6.21.2

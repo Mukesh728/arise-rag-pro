@@ -22,8 +22,14 @@ import re
 import logging
 import traceback
 from typing import List, Optional, Tuple, Dict, Any, Set
-import chromadb
-from chromadb.config import Settings as ChromaSettings
+try:
+    import chromadb
+except ImportError:  # pgvector deployments do not use the local Chroma client
+    chromadb = None
+try:
+    from chromadb.config import Settings as ChromaSettings
+except ImportError:
+    ChromaSettings = None
 from backend.app.config import settings
 from backend.app.models import Chunk, ChunkMetadata
 
@@ -35,7 +41,7 @@ class VectorSearchError(Exception):
     pass
 
 
-class ChromaVectorStore:
+class _LegacyChromaVectorStore:
     def __init__(self, collection_name: str = "mrsptu_study_rag"):
         """
         Initialize persistent ChromaDB client and get or create the collection.
@@ -341,3 +347,14 @@ class ChromaVectorStore:
         """Delete all chunks belonging to a particular doc_id."""
         self.collection.delete(where={"doc_id": doc_id})
         self._cached_subjects = None
+
+
+class ChromaVectorStore:
+    """Compatibility facade selecting the configured durable vector backend."""
+    def __new__(cls, *args, **kwargs):
+        if str(settings.VECTOR_STORE_TYPE).strip().lower() == "pgvector":
+            from backend.app.rag.pgvector_store import SupabasePgVectorStore
+            return SupabasePgVectorStore(*args, **kwargs)
+        if chromadb is None:
+            raise RuntimeError("chromadb is required when VECTOR_STORE_TYPE=chroma")
+        return _LegacyChromaVectorStore(*args, **kwargs)

@@ -8,14 +8,14 @@ A FastAPI-based Retrieval-Augmented Generation (RAG) system that lets students a
 
 ## Overview
 
-- **Hybrid Search**: ChromaDB vector similarity + BM25 keyword search fused with Reciprocal Rank Fusion (RRF, k=60)
+- **Hybrid Search**: Supabase pgvector similarity + BM25 keyword search fused with Reciprocal Rank Fusion (RRF, k=60); Chroma remains only as a local rollback/migration source
 - **Unit-Aware Chunking**: Detects `UNIT-I`, `UNIT-II`, `UNIT-IV (11 Hrs)` headings automatically; carries unit context forward across pages
 - **Confidence Guardrail**: Off-topic questions (e.g. "Who won IPL?") are blocked before reaching the LLM — never hallucinated content
 - **LLM Resilience**: 45-second HTTP timeout, 1 retry on 429/503, graceful fallback to raw passages; never crashes the server
 - **Neighbor-Chunk Expansion**: After retrieval, ±1 page chunks are added to LLM context (deduplicated, capped at K+3), improving multi-page answer coverage
 - **Authentication & RBAC**: `/login` portal with bcrypt encryption, signed HttpOnly session cookies, brute-force rate limiting (5 attempts/15m), and role-based access (Admins manage PDFs and corpus; students study)
 - **Viva Benchmark**: `/api/evaluate` measures Hit Rate@K (Vector vs Hybrid) without calling Gemini
-- **Deploy-Ready**: Single-worker `uvicorn` (BM25 is in-process), Dockerfile with pre-cached ONNX embedding model, proxy-aware IP headers, `$PORT`-aware CMD
+- **Deploy-Ready**: Single-worker `uvicorn` (BM25 is in-process), Render-compatible Dockerfile, Supabase pgvector/Storage persistence, proxy-aware IP headers, `$PORT`-aware CMD
 
 ---
 
@@ -25,7 +25,7 @@ A FastAPI-based Retrieval-Augmented Generation (RAG) system that lets students a
 flowchart TD
     A["PDF Upload\n(frontend)"] --> B["PDFExtractor\n(pypdf, per-page text)"]
     B --> C["TokenChunker\n(tiktoken, 500 tok + 50 overlap)\nUnit heading detection (UNIT-IV regex)"]
-    C --> D["ChromaDB\n(vector embeddings + metadata)"]
+    C --> D["Supabase Postgres + pgvector\n(embeddings + chunks + metadata)"]
     C --> E["BM25Index\n(in-memory, synced on startup)"]
     D & E --> F["HybridSearchService\nRRF fusion (k=60)"]
     F --> G["Guardrail\nguardrail.py: vector sim ≥ 0.32\nor hybrid keyword coverage ≥ 60%"]
@@ -43,7 +43,7 @@ flowchart TD
 | Layer | Technology |
 |---|---|
 | Backend | FastAPI 0.159, Python 3.11, uvicorn 0.54 |
-| Vector Store | ChromaDB 1.5.9 (persistent, local) |
+| Vector Store | Supabase Postgres + pgvector (384-dim cosine) |
 | Keyword Search | rank-bm25 0.2.2 (BM25Okapi) |
 | Fusion | Reciprocal Rank Fusion (RRF, k=60) |
 | PDF Parsing | pypdf 6.21.2 |

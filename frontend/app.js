@@ -82,6 +82,7 @@ function initMRSPTUApp() {
 
     // Fetch account-scoped uploaded documents
     fetchUserDocuments();
+    loadDurableHistory();
   }
 
   // ---------------------------------------------------------
@@ -281,6 +282,7 @@ function initMRSPTUApp() {
     } catch (e) {
       console.warn("Failed to clear arise-history from localStorage:", e);
     }
+    fetch("/api/history", { method: "DELETE" }).catch(() => {});
     renderHistoryList([]);
   }
 
@@ -354,7 +356,32 @@ function initMRSPTUApp() {
     });
   }
 
-  // Initial render of saved questions on page load
+  function loadDurableHistory() {
+    fetch("/api/history")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+      const remote = Array.isArray(payload && payload.history) ? payload.history : [];
+      if (!remote.length) return;
+      const merged = remote.map((h) => ({
+        question: h.question,
+        mode: h.mode || "hybrid",
+        subject: h.subject || "all",
+        timestamp: h.created_at ? Date.parse(h.created_at) || Date.now() : Date.now(),
+      })).concat(getStoredHistory());
+      const seen = new Set();
+      const deduped = merged.filter((h) => {
+        const key = String(h.question || "").trim().toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, MAX_HISTORY_ITEMS);
+      localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(deduped));
+      renderHistoryList(deduped);
+      })
+      .catch(() => {});
+  }
+
+  // Initial render of browser-local history; durable history is loaded after auth.
   renderHistoryList(getStoredHistory());
 
   // ---------------------------------------------------------
@@ -414,7 +441,7 @@ function initMRSPTUApp() {
       state.serverHealth = data;
 
       if (headerChunkCount) headerChunkCount.textContent = `${data.total_chunks || 0} Chunks`;
-      if (statusLabel) statusLabel.textContent = "ChromaDB Online";
+      if (statusLabel) statusLabel.textContent = data.vector_store === "pgvector" ? "Supabase pgvector Online" : "ChromaDB Online";
       if (statusDot) statusDot.className = "status-dot online";
     } catch (err) {
       console.warn("Server health poll warning:", err);

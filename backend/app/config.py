@@ -48,7 +48,8 @@ class Settings(BaseModel):
     # Vector store config ("chroma" or "pgvector")
     VECTOR_STORE_TYPE: str = os.getenv("VECTOR_STORE_TYPE", "chroma")
     CHROMA_PERSIST_DIR: str = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/mrsptu_rag")
+    # Prefer the explicit Supabase name; DATABASE_URL remains supported for Render.
+    DATABASE_URL: str = os.getenv("SUPABASE_DB_URL", os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/mrsptu_rag"))
     
     # Storage
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
@@ -86,4 +87,5 @@ settings = Settings()
 
 # Ensure directories exist
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-os.makedirs(settings.CHROMA_PERSIST_DIR, exist_ok=True)
+if settings.VECTOR_STORE_TYPE.strip().lower() == "chroma":
+    os.makedirs(settings.CHROMA_PERSIST_DIR, exist_ok=True)
